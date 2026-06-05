@@ -1,0 +1,30 @@
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# Java
+backend-core/target/
+
+# Python
+backend-ai/venv/
+backend-ai/__pycache__/
+**/__pycache__/
+**/*.pyc
+backend-ai/.env
+
+# Env
+.env
+
+# Docker
+postgres_data/
+qdrant_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI generated files
+CLAUDE.md
+agent.md
+*.agent.md
