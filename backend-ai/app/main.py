@@ -1,9 +1,7 @@
-@'
 from fastapi import FastAPI
+
+from app.api.health import router as health_router
 
 app = FastAPI(title="CodePulse AI Engine")
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-'@ | Set-Content app/main.py
+app.include_router(health_router)

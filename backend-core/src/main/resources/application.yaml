@@ -1,11 +1,11 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/codepulse
-    username: codepulse
-    password: codepulse123
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/codepulse}
+    username: ${SPRING_DATASOURCE_USERNAME:codepulse}
+    password: ${SPRING_DATASOURCE_PASSWORD:codepulse123}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -20,12 +20,15 @@ spring:
       client:
         registration:
           github:
-            client-id: ${GITHUB_CLIENT_ID}
-            client-secret: ${GITHUB_CLIENT_SECRET}
+            client-id: ${GITHUB_CLIENT_ID:}
+            client-secret: ${GITHUB_CLIENT_SECRET:}
 
 jwt:
-  secret: your-super-secret-key-change-this-to-something-long
-  expiration: 86400000
+  secret: ${JWT_SECRET:your-super-secret-key-change-this-to-something-long}
+  expiration: ${JWT_EXPIRATION:86400000}
 
 fastapi:
-  base-url: http://localhost:8000
+  base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+
+frontend:
+  allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:3000}
