@@ -18,6 +18,7 @@ import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
+import com.codepulse.scan.dto.StartScanRequest;
 
 @Service
 public class ScanService {
@@ -39,13 +40,17 @@ public class ScanService {
     }
 
     @Transactional
-    public ScanDetailResponse startScan(UUID repositoryId, User currentUser) {
+    public ScanDetailResponse startScan(UUID repositoryId, StartScanRequest request, User currentUser) {
         requireAuthenticated(currentUser);
         RepositoryEntity repository = findRepositoryForAccess(repositoryId, currentUser);
 
         ScanEntity scan = scanRepository.save(new ScanEntity(repository));
         try {
-            aiServiceClient.dispatchScan(scan.getId(), repository.getId(), repository.getGithubUrl());
+            aiServiceClient.dispatchScan(
+                    scan.getId(),
+                    repository.getId(),
+                    repository.getGithubUrl(),
+                    request.normalizedBranch());
         } catch (RuntimeException exception) {
             scan.markFailed("AI dispatch failed.");
         }

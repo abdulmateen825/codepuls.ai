@@ -32,6 +32,7 @@ import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
+import com.codepulse.scan.dto.StartScanRequest;
 
 @ExtendWith(MockitoExtension.class)
 class ScanServiceTest {
@@ -69,11 +70,38 @@ class ScanServiceTest {
             return scan;
         });
 
-        ScanDetailResponse response = scanService.startScan(repositoryId, owner);
+        ScanDetailResponse response = scanService.startScan(repositoryId, new StartScanRequest("develop"), owner);
 
         assertThat(response.id()).isEqualTo(scanId);
         assertThat(response.status()).isEqualTo("QUEUED");
-        verify(aiServiceClient).dispatchScan(scanId, repositoryId, "https://github.com/codepulse/backend-core");
+        verify(aiServiceClient).dispatchScan(
+                scanId,
+                repositoryId,
+                "https://github.com/codepulse/backend-core",
+                "develop");
+    }
+
+    @Test
+    void startScanDefaultsBranchToMainWhenMissing() {
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        UUID repositoryId = UUID.randomUUID();
+        RepositoryEntity repository = repository(repositoryId, owner);
+        UUID scanId = UUID.randomUUID();
+
+        when(repositoryRepository.findById(repositoryId)).thenReturn(Optional.of(repository));
+        when(scanRepository.save(any(ScanEntity.class))).thenAnswer(invocation -> {
+            ScanEntity scan = invocation.getArgument(0);
+            ReflectionTestUtils.setField(scan, "id", scanId);
+            return scan;
+        });
+
+        scanService.startScan(repositoryId, new StartScanRequest(null), owner);
+
+        verify(aiServiceClient).dispatchScan(
+                scanId,
+                repositoryId,
+                "https://github.com/codepulse/backend-core",
+                "main");
     }
 
     @Test
@@ -91,9 +119,9 @@ class ScanServiceTest {
         });
         doThrow(new IllegalStateException("FastAPI unavailable"))
                 .when(aiServiceClient)
-                .dispatchScan(scanId, repositoryId, "https://github.com/codepulse/backend-core");
+                .dispatchScan(scanId, repositoryId, "https://github.com/codepulse/backend-core", "main");
 
-        ScanDetailResponse response = scanService.startScan(repositoryId, owner);
+        ScanDetailResponse response = scanService.startScan(repositoryId, new StartScanRequest(null), owner);
 
         assertThat(response.status()).isEqualTo("FAILED");
         assertThat(response.errorMessage()).isEqualTo("AI dispatch failed.");
@@ -101,7 +129,7 @@ class ScanServiceTest {
 
     @Test
     void startScanRequiresAuthenticatedUser() {
-        assertThatThrownBy(() -> scanService.startScan(UUID.randomUUID(), null))
+        assertThatThrownBy(() -> scanService.startScan(UUID.randomUUID(), new StartScanRequest(null), null))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("UNAUTHORIZED");
@@ -114,7 +142,7 @@ class ScanServiceTest {
         UUID repositoryId = UUID.randomUUID();
         when(repositoryRepository.findById(repositoryId)).thenReturn(Optional.of(repository(repositoryId, otherUser)));
 
-        assertThatThrownBy(() -> scanService.startScan(repositoryId, owner))
+        assertThatThrownBy(() -> scanService.startScan(repositoryId, new StartScanRequest(null), owner))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("FORBIDDEN");

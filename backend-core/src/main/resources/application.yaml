@@ -30,6 +30,7 @@ jwt:
 
 fastapi:
   base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+  internal-api-key: ${INTERNAL_API_KEY:change-me-internal-api-key}
 
 frontend:
   allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:3000}

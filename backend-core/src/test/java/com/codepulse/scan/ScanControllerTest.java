@@ -30,10 +30,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.codepulse.auth.entity.User;
 import com.codepulse.auth.service.JwtService;
 import com.codepulse.common.exception.ApiException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
+import com.codepulse.scan.dto.StartScanRequest;
 
 @WebMvcTest(
         controllers = ScanController.class,
@@ -45,6 +47,9 @@ class ScanControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockBean
     private ScanService scanService;
@@ -59,12 +64,29 @@ class ScanControllerTest {
     void startScanReturnsCreatedScanForAuthenticatedUser() throws Exception {
         UUID repositoryId = UUID.randomUUID();
         UUID scanId = UUID.randomUUID();
-        when(scanService.startScan(eq(repositoryId), nullable(User.class)))
+        when(scanService.startScan(eq(repositoryId), any(StartScanRequest.class), nullable(User.class)))
                 .thenReturn(scanDetail(scanId, repositoryId));
 
         mockMvc.perform(post("/api/repositories/{repositoryId}/scans", repositoryId)
                 .with(csrf())
                 .with(user(currentUser())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(scanId.toString()))
+                .andExpect(jsonPath("$.status").value("QUEUED"));
+    }
+
+    @Test
+    void startRepositoryScanAcceptsBranchRequestBody() throws Exception {
+        UUID repositoryId = UUID.randomUUID();
+        UUID scanId = UUID.randomUUID();
+        when(scanService.startScan(eq(repositoryId), any(StartScanRequest.class), nullable(User.class)))
+                .thenReturn(scanDetail(scanId, repositoryId));
+
+        mockMvc.perform(post("/api/repositories/{repositoryId}/scan", repositoryId)
+                .with(csrf())
+                .with(user(currentUser()))
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(new StartScanRequest("develop"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(scanId.toString()))
                 .andExpect(jsonPath("$.status").value("QUEUED"));
@@ -80,7 +102,7 @@ class ScanControllerTest {
     @Test
     void startScanReturnsForbiddenForRepositoryOwnedByAnotherUser() throws Exception {
         UUID repositoryId = UUID.randomUUID();
-        when(scanService.startScan(eq(repositoryId), nullable(User.class)))
+        when(scanService.startScan(eq(repositoryId), any(StartScanRequest.class), nullable(User.class)))
                 .thenThrow(ApiException.forbidden("You do not have access to this repository."));
 
         mockMvc.perform(post("/api/repositories/{repositoryId}/scans", repositoryId)
