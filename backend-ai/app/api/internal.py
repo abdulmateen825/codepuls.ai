@@ -27,12 +27,13 @@ def analyze(
     authorization: Annotated[str | None, Header()] = None,
 ) -> AnalyzeAcceptedResponse:
     verify_internal_api_key(authorization)
-    file_tree = prepare_repository_for_scan(request)
-    background_tasks.add_task(process_scan_placeholder, request, file_tree)
+    repository_metadata = prepare_repository_for_scan(request)
+    background_tasks.add_task(process_scan_placeholder, request, repository_metadata)
 
     return AnalyzeAcceptedResponse(
         accepted=True,
         scan_id=request.scan_id,
         status="accepted",
-        file_tree=file_tree,
+        file_tree=repository_metadata["fileTree"],
+        parsed_files=repository_metadata["parsedFiles"],
     )

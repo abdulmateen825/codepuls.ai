@@ -25,8 +25,15 @@ class InternalAnalyzeTest(unittest.TestCase):
             "type": "directory",
             "children": [],
         }
+        parsed_files = {
+            "totalFiles": 0,
+            "files": [],
+        }
 
-        with patch("app.api.internal.prepare_repository_for_scan", return_value=file_tree):
+        with patch(
+            "app.api.internal.prepare_repository_for_scan",
+            return_value={"fileTree": file_tree, "parsedFiles": parsed_files},
+        ):
             response = self.client.post(
                 "/internal/analyze",
                 json=self.payload,
@@ -41,6 +48,7 @@ class InternalAnalyzeTest(unittest.TestCase):
                 "scanId": self.payload["scanId"],
                 "status": "accepted",
                 "fileTree": file_tree,
+                "parsedFiles": parsed_files,
             },
         )
 

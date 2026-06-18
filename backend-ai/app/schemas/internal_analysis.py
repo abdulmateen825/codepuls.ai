@@ -19,3 +19,4 @@ class AnalyzeAcceptedResponse(BaseModel):
     scan_id: UUID = Field(alias="scanId")
     status: str
     file_tree: dict = Field(alias="fileTree")
+    parsed_files: dict = Field(alias="parsedFiles")
