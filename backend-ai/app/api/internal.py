@@ -36,4 +36,5 @@ def analyze(
         status="accepted",
         file_tree=repository_metadata["fileTree"],
         parsed_files=repository_metadata["parsedFiles"],
+        analysis=repository_metadata["analysis"],
     )

@@ -1,4 +1,5 @@
 from app.schemas.internal_analysis import AnalyzeRequest
+from app.services.analysis.analysis_runner import run_static_analysis
 from app.services.github.file_discovery import build_file_tree
 from app.services.github.repo_cleaner import remove_ignored_paths
 from app.services.github.repo_cloner import clone_public_repository
@@ -15,6 +16,7 @@ def prepare_repository_for_scan(request: AnalyzeRequest) -> dict:
     return {
         "fileTree": build_file_tree(repository_path),
         "parsedFiles": parse_repository(repository_path),
+        "analysis": run_static_analysis(repository_path),
     }
 
 

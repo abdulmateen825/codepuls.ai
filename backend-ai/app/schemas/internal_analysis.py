@@ -20,3 +20,4 @@ class AnalyzeAcceptedResponse(BaseModel):
     status: str
     file_tree: dict = Field(alias="fileTree")
     parsed_files: dict = Field(alias="parsedFiles")
+    analysis: dict
