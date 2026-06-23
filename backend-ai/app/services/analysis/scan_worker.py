@@ -3,6 +3,7 @@ from typing import Any
 
 from app.schemas.internal_analysis import AnalyzeRequest
 from app.services.analysis.analysis_runner import run_static_analysis
+from app.services.analysis.health_score import calculate_health_scores, spring_score_summary
 from app.services.analysis.spring_callback_client import SpringCallbackError, send_scan_results
 from app.services.github.file_discovery import build_file_tree
 from app.services.github.repo_cleaner import remove_ignored_paths
@@ -42,13 +43,14 @@ def process_scan(request: AnalyzeRequest) -> None:
         repository_metadata = prepare_repository_for_scan(request)
         analysis = repository_metadata["analysis"]
         findings = analysis.get("findings", [])
+        health_scores = calculate_health_scores(findings)
         _send_callback(
             request,
             {
                 "status": "COMPLETED",
-                "metadata": _completed_metadata(request, repository_metadata),
+                "metadata": _completed_metadata(request, repository_metadata, health_scores),
                 "findings": findings,
-                "scores": _calculate_scores(findings),
+                "scores": spring_score_summary(health_scores),
                 "errorMessage": None,
             },
         )
@@ -81,7 +83,7 @@ def _base_metadata(request: AnalyzeRequest) -> dict:
     }
 
 
-def _completed_metadata(request: AnalyzeRequest, repository_metadata: dict) -> dict:
+def _completed_metadata(request: AnalyzeRequest, repository_metadata: dict, health_scores: dict) -> dict:
     analysis = repository_metadata["analysis"]
     return {
         **_base_metadata(request),
@@ -89,31 +91,5 @@ def _completed_metadata(request: AnalyzeRequest, repository_metadata: dict) -> d
         "parsedFiles": repository_metadata["parsedFiles"],
         "analysisTools": analysis.get("tools", []),
         "totalFindings": analysis.get("totalFindings", 0),
-    }
-
-
-def _calculate_scores(findings: list[dict]) -> dict:
-    severity_weights = {
-        "CRITICAL": 25,
-        "HIGH": 15,
-        "MEDIUM": 8,
-        "LOW": 3,
-    }
-
-    def score_for(categories: set[str]) -> int:
-        penalty = sum(
-            severity_weights.get(str(finding.get("severity", "")).upper(), 3)
-            for finding in findings
-            if str(finding.get("category", "")).lower() in categories
-        )
-        return max(0, 100 - penalty)
-
-    security_score = score_for({"security", "secret"})
-    quality_score = score_for({"quality", "static-analysis"})
-    maintainability_penalty = min(100, len(findings) * 4)
-
-    return {
-        "qualityScore": quality_score,
-        "securityScore": security_score,
-        "maintainabilityScore": max(0, 100 - maintainability_penalty),
+        "healthScores": health_scores,
     }

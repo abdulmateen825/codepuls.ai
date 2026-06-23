@@ -47,8 +47,10 @@ class ScanCallbackTest(unittest.TestCase):
         self.assertEqual(running_payload["status"], "RUNNING")
         self.assertEqual(completed_payload["status"], "COMPLETED")
         self.assertEqual(completed_payload["findings"][0]["toolName"], "ruff")
-        self.assertLess(completed_payload["scores"]["qualityScore"], 100)
+        self.assertEqual(completed_payload["scores"]["qualityScore"], 95)
+        self.assertEqual(completed_payload["scores"]["maintainabilityScore"], 95)
         self.assertEqual(completed_payload["metadata"]["totalFindings"], 1)
+        self.assertEqual(completed_payload["metadata"]["healthScores"]["overallScore"]["grade"], "Excellent")
 
     def test_process_scan_sends_failed_callback_when_scan_work_raises(self) -> None:
         with patch("app.services.analysis.scan_worker.prepare_repository_for_scan", side_effect=ValueError("clone failed")), \
