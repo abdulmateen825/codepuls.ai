@@ -1,11 +1,16 @@
 package com.codepulse.integration.ai;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import com.codepulse.ai.dto.ChatMessageRequest;
+import com.codepulse.ai.dto.FindingExplanationResponse;
+import com.codepulse.ai.dto.RepositoryChatResponse;
 
 @Component
 public class AiServiceClient {
@@ -32,10 +37,48 @@ public class AiServiceClient {
                 .toBodilessEntity();
     }
 
+    public RepositoryChatResponse chat(UUID repositoryId, String question, List<ChatMessageRequest> history) {
+        return restClient.post()
+                .uri("/internal/repositories/chat")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalApiKey)
+                .body(new InternalChatRequest(repositoryId, question, history == null ? List.of() : history))
+                .retrieve()
+                .body(RepositoryChatResponse.class);
+    }
+
+    public FindingExplanationResponse explainFinding(InternalFindingExplainRequest request) {
+        return restClient.post()
+                .uri("/internal/findings/explain")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalApiKey)
+                .body(request)
+                .retrieve()
+                .body(FindingExplanationResponse.class);
+    }
+
     private record DispatchScanRequest(
             UUID scanId,
             UUID repositoryId,
             String githubUrl,
             String branch) {
+    }
+
+    private record InternalChatRequest(
+            UUID repositoryId,
+            String question,
+            List<ChatMessageRequest> history) {
+    }
+
+    public record InternalFindingExplainRequest(
+            UUID repositoryId,
+            UUID scanId,
+            UUID findingId,
+            String severity,
+            String category,
+            String title,
+            String description,
+            String recommendation,
+            String filePath,
+            Integer lineNumber,
+            String ruleId) {
     }
 }
