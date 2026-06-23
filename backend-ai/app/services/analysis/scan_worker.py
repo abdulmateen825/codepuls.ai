@@ -9,6 +9,7 @@ from app.services.github.file_discovery import build_file_tree
 from app.services.github.repo_cleaner import remove_ignored_paths
 from app.services.github.repo_cloner import clone_public_repository
 from app.services.parser.file_parser import parse_repository
+from app.services.rag.retriever import index_repository_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ def prepare_repository_for_scan(request: AnalyzeRequest) -> dict:
         "fileTree": build_file_tree(repository_path),
         "parsedFiles": parse_repository(repository_path),
         "analysis": run_static_analysis(repository_path),
+        "ragIndex": _index_rag_chunks(repository_path, request),
     }
 
 
@@ -92,4 +94,19 @@ def _completed_metadata(request: AnalyzeRequest, repository_metadata: dict, heal
         "analysisTools": analysis.get("tools", []),
         "totalFindings": analysis.get("totalFindings", 0),
         "healthScores": health_scores,
+        "ragIndex": repository_metadata.get("ragIndex", {}),
     }
+
+
+def _index_rag_chunks(repository_path, request: AnalyzeRequest) -> dict:
+    try:
+        return {
+            "status": "completed",
+            **index_repository_chunks(repository_path, request.repository_id, request.scan_id),
+        }
+    except Exception as exception:
+        logger.exception("RAG indexing failed for scan %s.", request.scan_id)
+        return {
+            "status": "failed",
+            "error": str(exception)[:500] or "RAG indexing failed.",
+        }
