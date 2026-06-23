@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
 
 from app.schemas.internal_analysis import AnalyzeAcceptedResponse, AnalyzeRequest
-from app.services.analysis.scan_worker import prepare_repository_for_scan, process_scan_placeholder
+from app.services.analysis.scan_worker import process_scan
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -27,14 +27,13 @@ def analyze(
     authorization: Annotated[str | None, Header()] = None,
 ) -> AnalyzeAcceptedResponse:
     verify_internal_api_key(authorization)
-    repository_metadata = prepare_repository_for_scan(request)
-    background_tasks.add_task(process_scan_placeholder, request, repository_metadata)
+    background_tasks.add_task(process_scan, request)
 
     return AnalyzeAcceptedResponse(
         accepted=True,
         scan_id=request.scan_id,
         status="accepted",
-        file_tree=repository_metadata["fileTree"],
-        parsed_files=repository_metadata["parsedFiles"],
-        analysis=repository_metadata["analysis"],
+        file_tree={},
+        parsed_files={},
+        analysis={},
     )

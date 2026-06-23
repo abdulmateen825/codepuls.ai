@@ -18,33 +18,15 @@ class InternalAnalyzeTest(unittest.TestCase):
             "branch": "main",
         }
 
-    def test_analyze_returns_accepted_response_with_file_tree(self) -> None:
-        file_tree = {
-            "name": "backend-core",
-            "path": "",
-            "type": "directory",
-            "children": [],
-        }
-        parsed_files = {
-            "totalFiles": 0,
-            "files": [],
-        }
-        analysis = {
-            "totalFindings": 0,
-            "findings": [],
-            "tools": [],
-        }
-
-        with patch(
-            "app.api.internal.prepare_repository_for_scan",
-            return_value={"fileTree": file_tree, "parsedFiles": parsed_files, "analysis": analysis},
-        ):
+    def test_analyze_returns_accepted_response_and_schedules_scan(self) -> None:
+        with patch("app.api.internal.process_scan") as process_scan:
             response = self.client.post(
                 "/internal/analyze",
                 json=self.payload,
                 headers={"Authorization": "Bearer test-key"},
             )
 
+        process_scan.assert_called_once()
         self.assertEqual(response.status_code, 202)
         self.assertEqual(
             response.json(),
@@ -52,9 +34,9 @@ class InternalAnalyzeTest(unittest.TestCase):
                 "accepted": True,
                 "scanId": self.payload["scanId"],
                 "status": "accepted",
-                "fileTree": file_tree,
-                "parsedFiles": parsed_files,
-                "analysis": analysis,
+                "fileTree": {},
+                "parsedFiles": {},
+                "analysis": {},
             },
         )
 

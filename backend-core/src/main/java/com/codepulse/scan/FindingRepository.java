@@ -12,6 +12,8 @@ import com.codepulse.scan.domain.ScanEntity;
 
 public interface FindingRepository extends JpaRepository<FindingEntity, UUID> {
 
+    void deleteByScan(ScanEntity scan);
+
     @Query("""
             select finding
             from FindingEntity finding

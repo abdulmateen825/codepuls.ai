@@ -8,9 +8,11 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,8 +33,13 @@ import com.codepulse.scan.domain.ScanEntity;
 import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
+import com.codepulse.scan.dto.ScanResultCallbackRequest;
+import com.codepulse.scan.dto.ScanResultFindingRequest;
+import com.codepulse.scan.dto.ScanResultScoresRequest;
 import com.codepulse.scan.dto.ScanSummaryResponse;
 import com.codepulse.scan.dto.StartScanRequest;
+import com.codepulse.scan.domain.ScanStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class ScanServiceTest {
@@ -53,7 +60,12 @@ class ScanServiceTest {
 
     @BeforeEach
     void setUp() {
-        scanService = new ScanService(repositoryRepository, scanRepository, findingRepository, aiServiceClient);
+        scanService = new ScanService(
+                repositoryRepository,
+                scanRepository,
+                findingRepository,
+                aiServiceClient,
+                new ObjectMapper());
     }
 
     @Test
@@ -218,6 +230,64 @@ class ScanServiceTest {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("FORBIDDEN");
+    }
+
+    @Test
+    void applyScanResultsCompletesScanAndStoresFindings() {
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        UUID scanId = UUID.randomUUID();
+        ScanEntity scan = scan(scanId, repository(UUID.randomUUID(), owner));
+        ScanResultCallbackRequest request = new ScanResultCallbackRequest(
+                ScanStatus.COMPLETED,
+                new ScanResultScoresRequest(91, 82, 76),
+                Map.of("totalFindings", 1),
+                List.of(new ScanResultFindingRequest(
+                        "HIGH",
+                        "security",
+                        "generic-api-key",
+                        "A secret was detected.",
+                        "Rotate the secret.",
+                        ".env",
+                        1,
+                        "gitleaks",
+                        null)),
+                null);
+
+        when(scanRepository.findById(scanId)).thenReturn(Optional.of(scan));
+
+        ScanDetailResponse response = scanService.applyScanResults(scanId, request);
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.qualityScore()).isEqualTo(91);
+        assertThat(response.securityScore()).isEqualTo(82);
+        assertThat(response.maintainabilityScore()).isEqualTo(76);
+        verify(findingRepository).deleteByScan(scan);
+        ArgumentCaptor<List<FindingEntity>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(findingRepository).saveAll(findingsCaptor.capture());
+        assertThat(findingsCaptor.getValue()).hasSize(1);
+        assertThat(findingsCaptor.getValue().get(0).getRuleId()).isEqualTo("gitleaks:generic-api-key");
+        assertThat(scan.getMetadataJson()).contains("totalFindings");
+    }
+
+    @Test
+    void applyScanResultsMarksScanFailedAndClearsFindings() {
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        UUID scanId = UUID.randomUUID();
+        ScanEntity scan = scan(scanId, repository(UUID.randomUUID(), owner));
+        ScanResultCallbackRequest request = new ScanResultCallbackRequest(
+                ScanStatus.FAILED,
+                null,
+                Map.of("branch", "main"),
+                List.of(),
+                "clone failed");
+
+        when(scanRepository.findById(scanId)).thenReturn(Optional.of(scan));
+
+        ScanDetailResponse response = scanService.applyScanResults(scanId, request);
+
+        assertThat(response.status()).isEqualTo("FAILED");
+        assertThat(response.errorMessage()).isEqualTo("clone failed");
+        verify(findingRepository).deleteByScan(scan);
     }
 
     private User user(UUID id, String email) {

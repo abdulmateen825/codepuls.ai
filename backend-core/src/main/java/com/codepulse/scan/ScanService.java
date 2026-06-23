@@ -13,12 +13,18 @@ import com.codepulse.common.exception.ApiException;
 import com.codepulse.integration.ai.AiServiceClient;
 import com.codepulse.repository.RepositoryRepository;
 import com.codepulse.repository.domain.RepositoryEntity;
+import com.codepulse.scan.domain.FindingEntity;
 import com.codepulse.scan.domain.ScanEntity;
 import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
+import com.codepulse.scan.dto.ScanResultCallbackRequest;
+import com.codepulse.scan.dto.ScanResultFindingRequest;
+import com.codepulse.scan.dto.ScanResultScoresRequest;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
 import com.codepulse.scan.dto.StartScanRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ScanService {
@@ -27,16 +33,19 @@ public class ScanService {
     private final ScanRepository scanRepository;
     private final FindingRepository findingRepository;
     private final AiServiceClient aiServiceClient;
+    private final ObjectMapper objectMapper;
 
     public ScanService(
             RepositoryRepository repositoryRepository,
             ScanRepository scanRepository,
             FindingRepository findingRepository,
-            AiServiceClient aiServiceClient) {
+            AiServiceClient aiServiceClient,
+            ObjectMapper objectMapper) {
         this.repositoryRepository = repositoryRepository;
         this.scanRepository = scanRepository;
         this.findingRepository = findingRepository;
         this.aiServiceClient = aiServiceClient;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -93,6 +102,38 @@ public class ScanService {
         return FindingPageResponse.from(findings);
     }
 
+    @Transactional
+    public ScanDetailResponse applyScanResults(UUID scanId, ScanResultCallbackRequest request) {
+        ScanEntity scan = scanRepository.findById(scanId)
+                .orElseThrow(() -> ApiException.notFound("Scan was not found."));
+        String metadataJson = toMetadataJson(request);
+
+        switch (request.status()) {
+            case QUEUED -> scan.markQueued(metadataJson);
+            case RUNNING -> scan.markRunning(metadataJson);
+            case COMPLETED -> {
+                findingRepository.deleteByScan(scan);
+                ScanResultScoresRequest scores = request.scores();
+                scan.markCompleted(
+                        scores == null ? null : scores.qualityScore(),
+                        scores == null ? null : scores.securityScore(),
+                        scores == null ? null : scores.maintainabilityScore(),
+                        metadataJson);
+                findingRepository.saveAll(toFindingEntities(scan, request.normalizedFindings()));
+            }
+            case FAILED -> {
+                findingRepository.deleteByScan(scan);
+                scan.markFailed(
+                        request.errorMessage() == null || request.errorMessage().isBlank()
+                                ? "Scan failed."
+                                : request.errorMessage().trim(),
+                        metadataJson);
+            }
+        }
+
+        return ScanDetailResponse.from(scan);
+    }
+
     private RepositoryEntity findRepositoryForAccess(UUID repositoryId, User currentUser) {
         RepositoryEntity repository = repositoryRepository.findById(repositoryId)
                 .orElseThrow(() -> ApiException.notFound("Repository was not found."));
@@ -122,6 +163,38 @@ public class ScanService {
         }
 
         return value.trim();
+    }
+
+    private List<FindingEntity> toFindingEntities(ScanEntity scan, List<ScanResultFindingRequest> findings) {
+        return findings.stream()
+                .map(finding -> new FindingEntity(
+                        scan,
+                        trimToMax(finding.normalizedRuleId(), 120),
+                        trimToMax(finding.category().trim(), 50),
+                        trimToMax(finding.severity().trim(), 30),
+                        trimToMax(finding.title().trim(), 300),
+                        trimToMax(finding.description().trim(), 2000),
+                        trimToMax(finding.filePath().trim(), 1000),
+                        finding.normalizedLineNumber(),
+                        trimToMax(finding.codeSnippet(), 4000),
+                        trimToMax(finding.recommendation(), 2000)))
+                .toList();
+    }
+
+    private String toMetadataJson(ScanResultCallbackRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request.normalizedMetadata());
+        } catch (JsonProcessingException exception) {
+            throw ApiException.badRequest("Scan metadata must be valid JSON.");
+        }
+    }
+
+    private String trimToMax(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
     }
 
     private void requireAuthenticated(User currentUser) {

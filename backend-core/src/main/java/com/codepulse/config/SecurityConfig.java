@@ -44,7 +44,8 @@ public class SecurityConfig {
                                 "/api/system/ai-health",
                                 "/api/auth/register",
                                 "/api/auth/login",
-                                "/api/auth/refresh")
+                                "/api/auth/refresh",
+                                "/internal/**")
                         .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

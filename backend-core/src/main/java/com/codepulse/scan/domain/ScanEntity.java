@@ -52,6 +52,9 @@ public class ScanEntity {
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
+    @Column(name = "metadata_json", columnDefinition = "jsonb")
+    private String metadataJson;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -79,6 +82,42 @@ public class ScanEntity {
 
     public void markFailed(String message) {
         status = ScanStatus.FAILED;
+        completedAt = Instant.now();
+        errorMessage = message;
+    }
+
+    public void markQueued(String metadataJson) {
+        status = ScanStatus.QUEUED;
+        this.metadataJson = metadataJson;
+        errorMessage = null;
+    }
+
+    public void markRunning(String metadataJson) {
+        status = ScanStatus.RUNNING;
+        this.metadataJson = metadataJson;
+        startedAt = startedAt == null ? Instant.now() : startedAt;
+        errorMessage = null;
+    }
+
+    public void markCompleted(
+            Integer qualityScore,
+            Integer securityScore,
+            Integer maintainabilityScore,
+            String metadataJson) {
+        status = ScanStatus.COMPLETED;
+        this.qualityScore = qualityScore;
+        this.securityScore = securityScore;
+        this.maintainabilityScore = maintainabilityScore;
+        this.metadataJson = metadataJson;
+        startedAt = startedAt == null ? Instant.now() : startedAt;
+        completedAt = Instant.now();
+        errorMessage = null;
+    }
+
+    public void markFailed(String message, String metadataJson) {
+        status = ScanStatus.FAILED;
+        this.metadataJson = metadataJson;
+        startedAt = startedAt == null ? Instant.now() : startedAt;
         completedAt = Instant.now();
         errorMessage = message;
     }
@@ -117,6 +156,10 @@ public class ScanEntity {
 
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    public String getMetadataJson() {
+        return metadataJson;
     }
 
     public Instant getCreatedAt() {
