@@ -1,7 +1,7 @@
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Response, status
 
 from app.schemas.ai_interactions import (
     FindingExplainRequest,
@@ -10,9 +10,11 @@ from app.schemas.ai_interactions import (
     RepositoryChatResponse,
 )
 from app.schemas.internal_analysis import AnalyzeAcceptedResponse, AnalyzeRequest
+from app.schemas.report_generation import GenerateReportRequest
 from app.services.analysis.scan_worker import process_scan
 from app.services.llm.finding_explainer import explain_finding
 from app.services.llm.repository_chat import answer_repository_question
+from app.services.reports.pdf_generator import generate_scan_report_pdf
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -65,3 +67,17 @@ def finding_explanation(
     verify_internal_api_key(authorization)
     response = explain_finding(request)
     return FindingExplanationResponse(**response)
+
+
+@router.post("/reports/pdf")
+def generate_report_pdf(
+    request: GenerateReportRequest,
+    authorization: Annotated[str | None, Header()] = None,
+) -> Response:
+    verify_internal_api_key(authorization)
+    pdf_bytes = generate_scan_report_pdf(request)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="codepulse-{request.scan_id}.pdf"'},
+    )

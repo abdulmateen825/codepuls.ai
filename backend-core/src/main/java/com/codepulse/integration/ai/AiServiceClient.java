@@ -55,6 +55,15 @@ public class AiServiceClient {
                 .body(FindingExplanationResponse.class);
     }
 
+    public byte[] generateReportPdf(InternalReportRequest request) {
+        return restClient.post()
+                .uri("/internal/reports/pdf")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalApiKey)
+                .body(request)
+                .retrieve()
+                .body(byte[].class);
+    }
+
     private record DispatchScanRequest(
             UUID scanId,
             UUID repositoryId,
@@ -72,6 +81,29 @@ public class AiServiceClient {
             UUID repositoryId,
             UUID scanId,
             UUID findingId,
+            String severity,
+            String category,
+            String title,
+            String description,
+            String recommendation,
+            String filePath,
+            Integer lineNumber,
+            String ruleId) {
+    }
+
+    public record InternalReportRequest(
+            UUID scanId,
+            UUID repositoryId,
+            String repositoryFullName,
+            String repositoryUrl,
+            String status,
+            Integer qualityScore,
+            Integer securityScore,
+            Integer maintainabilityScore,
+            List<InternalReportFinding> findings) {
+    }
+
+    public record InternalReportFinding(
             String severity,
             String category,
             String title,

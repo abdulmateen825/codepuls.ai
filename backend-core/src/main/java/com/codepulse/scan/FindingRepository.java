@@ -1,6 +1,7 @@
 package com.codepulse.scan;
 
 import java.util.UUID;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,8 @@ import com.codepulse.scan.domain.ScanEntity;
 public interface FindingRepository extends JpaRepository<FindingEntity, UUID> {
 
     void deleteByScan(ScanEntity scan);
+
+    List<FindingEntity> findAllByScanOrderByCreatedAtDesc(ScanEntity scan);
 
     @Query("""
             select finding
