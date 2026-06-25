@@ -44,6 +44,7 @@ class HealthScoreTest(unittest.TestCase):
         findings = [
             finding("HIGH", "security", "Hardcoded password", ".env", tool_name="gitleaks"),
             finding("HIGH", "quality", "Unused import", "app.py", tool_name="ruff"),
+            finding("MEDIUM", "CODE_SMELL", "Long method", "service.py", tool_name="code-smell"),
             finding("MEDIUM", "architecture", "Circular dependency", "graph.py"),
             finding("LOW", "performance", "Slow query", "repo.py"),
         ]
@@ -51,7 +52,7 @@ class HealthScoreTest(unittest.TestCase):
         scores = calculate_health_scores(findings)
 
         self.assertEqual(scores["securityScore"]["score"], 95)
-        self.assertEqual(scores["maintainabilityScore"]["score"], 95)
+        self.assertEqual(scores["maintainabilityScore"]["score"], 93)
         self.assertEqual(scores["architectureScore"]["score"], 98)
         self.assertEqual(scores["performanceScore"]["score"], 99)
 

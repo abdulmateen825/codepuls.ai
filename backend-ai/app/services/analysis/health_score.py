@@ -17,9 +17,9 @@ DIMENSION_RULES = {
         "cleanReason": "No security risks detected.",
     },
     "maintainabilityScore": {
-        "categories": {"maintainability", "quality", "static-analysis"},
+        "categories": {"maintainability", "quality", "static-analysis", "code_smell"},
         "tools": {"eslint", "ruff"},
-        "keywords": {"complex", "duplication", "lint", "maintainability", "unused"},
+        "keywords": {"complex", "duplication", "lint", "maintainability", "smell", "unused"},
         "cleanReason": "No maintainability risks detected.",
     },
     "architectureScore": {
