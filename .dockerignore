@@ -1,0 +1,16 @@
+.git
+.github
+.agents
+**/.env
+**/.env.*
+!.env.example
+**/node_modules
+**/.next
+**/target
+**/venv
+**/__pycache__
+**/*.pyc
+postgres_data
+qdrant_data
+*.log
+README.md
