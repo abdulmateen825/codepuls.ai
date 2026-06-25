@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.services.github.file_discovery import IGNORED_DIRECTORIES
 
 
@@ -22,12 +23,12 @@ def remove_ignored_paths(repository_path: Path) -> None:
 
 def cleanup_repository(repository_path: Path) -> None:
     root = repository_path.resolve()
-    codepulse_root = Path("/tmp/codepulse").resolve()
+    codepulse_root = get_settings().workspace_root.resolve()
 
     try:
         root.relative_to(codepulse_root)
     except ValueError as exception:
-        raise ValueError("Refusing to clean a repository outside /tmp/codepulse.") from exception
+        raise ValueError("Refusing to clean a repository outside the configured workspace root.") from exception
 
     shutil.rmtree(root, ignore_errors=True)
 

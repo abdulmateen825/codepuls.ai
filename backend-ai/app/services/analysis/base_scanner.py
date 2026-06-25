@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from app.core.config import get_settings, scanner_path
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -42,7 +44,6 @@ class ScannerResult:
 class BaseScanner(ABC):
     tool_name: str
     category: str
-    timeout_seconds = 120
 
     @abstractmethod
     def scan(self, repository_path: Path) -> ScannerResult:
@@ -55,6 +56,8 @@ class BaseScanner(ABC):
         allowed_finding_exit_codes: set[int] | None = None,
     ) -> tuple[Any | None, str | None]:
         allowed_finding_exit_codes = allowed_finding_exit_codes or set()
+        command = [scanner_path(command[0]), *command[1:]]
+        timeout_seconds = get_settings().scanner_timeout_seconds
 
         try:
             completed = subprocess.run(
@@ -62,13 +65,13 @@ class BaseScanner(ABC):
                 cwd=repository_path,
                 capture_output=True,
                 text=True,
-                timeout=self.timeout_seconds,
+                timeout=timeout_seconds,
                 check=False,
             )
         except FileNotFoundError:
             return None, f"{command[0]} is not installed or is not available on PATH."
         except subprocess.TimeoutExpired:
-            return None, f"{command[0]} timed out after {self.timeout_seconds} seconds."
+            return None, f"{command[0]} timed out after {timeout_seconds} seconds."
 
         output = completed.stdout.strip()
         if not output:

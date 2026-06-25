@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from uuid import UUID
 
+from app.core.config import get_settings
 from app.services.github.file_discovery import IGNORED_DIRECTORIES
 from app.services.parser.language_detector import detect_language, is_supported_file
 from app.services.rag.chunk_schema import CodeChunk
@@ -23,8 +24,11 @@ MAX_FILE_CHUNK_LINES = 120
 def chunk_repository(repository_path: Path, repository_id: UUID, scan_id: UUID) -> dict:
     root = repository_path.resolve()
     chunks = []
+    settings = get_settings()
 
     for file_path in _iter_supported_files(root):
+        if settings.max_file_count > 0 and len(chunks) >= settings.max_file_count:
+            break
         chunks.extend(chunk_file(file_path, root, repository_id, scan_id))
 
     return {
@@ -44,6 +48,10 @@ def chunk_file(file_path: Path, repository_root: Path, repository_id: UUID, scan
 
     language = detect_language(safe_file_path)
     if language is None:
+        return []
+
+    max_file_size = get_settings().max_individual_file_size_bytes
+    if max_file_size > 0 and safe_file_path.stat().st_size > max_file_size:
         return []
 
     content = safe_file_path.read_text(encoding="utf-8", errors="replace")

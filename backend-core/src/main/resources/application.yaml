@@ -1,6 +1,15 @@
 server:
   port: ${SERVER_PORT:8080}
 
+app:
+  environment: ${APP_ENV:local}
+  open-source-mode: ${OPEN_SOURCE_MODE:true}
+  enforce-usage-limits: ${ENFORCE_USAGE_LIMITS:false}
+  max-scans-per-user: ${MAX_SCANS_PER_USER:0}
+  max-concurrent-scans: ${MAX_CONCURRENT_SCANS:0}
+  report-storage-mode: ${REPORT_STORAGE_MODE:database}
+  report-storage-path: ${REPORT_STORAGE_PATH:/var/lib/codepulse/reports}
+
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/codepulse}
@@ -9,8 +18,8 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
     properties:
       hibernate:
         format_sql: true
@@ -34,3 +43,7 @@ fastapi:
 
 frontend:
   allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:3000}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}

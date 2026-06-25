@@ -65,7 +65,9 @@ class ScanServiceTest {
                 scanRepository,
                 findingRepository,
                 aiServiceClient,
-                new ObjectMapper());
+                new ObjectMapper(),
+                false,
+                0);
     }
 
     @Test
@@ -155,6 +157,27 @@ class ScanServiceTest {
         when(repositoryRepository.findById(repositoryId)).thenReturn(Optional.of(repository(repositoryId, otherUser)));
 
         assertThatThrownBy(() -> scanService.startScan(repositoryId, new StartScanRequest(null), owner))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("FORBIDDEN");
+    }
+
+    @Test
+    void startScanRejectsWhenOptionalUsageLimitIsReached() {
+        ScanService limitedScanService = new ScanService(
+                repositoryRepository,
+                scanRepository,
+                findingRepository,
+                aiServiceClient,
+                new ObjectMapper(),
+                true,
+                1);
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        UUID repositoryId = UUID.randomUUID();
+        when(repositoryRepository.findById(repositoryId)).thenReturn(Optional.of(repository(repositoryId, owner)));
+        when(scanRepository.countByRepositoryOwnerId(owner.getId())).thenReturn(1L);
+
+        assertThatThrownBy(() -> limitedScanService.startScan(repositoryId, new StartScanRequest(null), owner))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("FORBIDDEN");

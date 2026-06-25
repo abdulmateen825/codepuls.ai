@@ -3,6 +3,7 @@ package com.codepulse.scan;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,24 +36,31 @@ public class ScanService {
     private final FindingRepository findingRepository;
     private final AiServiceClient aiServiceClient;
     private final ObjectMapper objectMapper;
+    private final boolean enforceUsageLimits;
+    private final int maxScansPerUser;
 
     public ScanService(
             RepositoryRepository repositoryRepository,
             ScanRepository scanRepository,
             FindingRepository findingRepository,
             AiServiceClient aiServiceClient,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${app.enforce-usage-limits:false}") boolean enforceUsageLimits,
+            @Value("${app.max-scans-per-user:0}") int maxScansPerUser) {
         this.repositoryRepository = repositoryRepository;
         this.scanRepository = scanRepository;
         this.findingRepository = findingRepository;
         this.aiServiceClient = aiServiceClient;
         this.objectMapper = objectMapper;
+        this.enforceUsageLimits = enforceUsageLimits;
+        this.maxScansPerUser = maxScansPerUser;
     }
 
     @Transactional
     public ScanDetailResponse startScan(UUID repositoryId, StartScanRequest request, User currentUser) {
         requireAuthenticated(currentUser);
         RepositoryEntity repository = findRepositoryForAccess(repositoryId, currentUser);
+        enforceScanUsageLimit(currentUser);
 
         ScanEntity scan = scanRepository.save(new ScanEntity(repository));
         try {
@@ -243,6 +251,17 @@ public class ScanService {
     private void requireAuthenticated(User currentUser) {
         if (currentUser == null) {
             throw ApiException.unauthorized("Authentication is required.");
+        }
+    }
+
+    private void enforceScanUsageLimit(User currentUser) {
+        if (!enforceUsageLimits || maxScansPerUser <= 0) {
+            return;
+        }
+
+        long scanCount = scanRepository.countByRepositoryOwnerId(currentUser.getId());
+        if (scanCount >= maxScansPerUser) {
+            throw ApiException.forbidden("Scan usage limit has been reached.");
         }
     }
 }

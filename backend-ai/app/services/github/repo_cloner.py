@@ -4,7 +4,8 @@ from pathlib import Path
 from uuid import UUID
 from urllib.parse import urlparse
 
-CODEPULSE_TMP_ROOT = Path("/tmp/codepulse")
+from app.core.config import get_settings, scanner_path
+
 MAX_BRANCH_LENGTH = 120
 
 
@@ -13,6 +14,7 @@ class RepositoryCloneError(RuntimeError):
 
 
 def clone_public_repository(scan_id: UUID, github_url: str, branch: str = "main") -> Path:
+    settings = get_settings()
     workspace = scan_workspace(scan_id)
     safe_github_url = normalize_github_url(github_url)
     safe_branch = normalize_branch(branch)
@@ -23,7 +25,7 @@ def clone_public_repository(scan_id: UUID, github_url: str, branch: str = "main"
     workspace.parent.mkdir(parents=True, exist_ok=True)
 
     command = [
-        "git",
+        scanner_path("git"),
         "clone",
         "--depth",
         "1",
@@ -40,7 +42,7 @@ def clone_public_repository(scan_id: UUID, github_url: str, branch: str = "main"
             check=True,
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=settings.clone_timeout_seconds,
         )
     except subprocess.CalledProcessError as exception:
         raise RepositoryCloneError(_clone_error_message(exception.stderr)) from exception
@@ -51,7 +53,7 @@ def clone_public_repository(scan_id: UUID, github_url: str, branch: str = "main"
 
 
 def scan_workspace(scan_id: UUID) -> Path:
-    root = CODEPULSE_TMP_ROOT.resolve()
+    root = get_settings().workspace_root.resolve()
     workspace = (root / str(scan_id)).resolve()
 
     if root != workspace.parent:
