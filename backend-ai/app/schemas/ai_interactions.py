@@ -45,6 +45,15 @@ class FindingExplainRequest(BaseModel):
     recommendation: str | None = None
     file_path: str = Field(alias="filePath")
     line_number: int | None = Field(default=None, alias="lineNumber")
+    start_line: int | None = Field(default=None, alias="startLine")
+    end_line: int | None = Field(default=None, alias="endLine")
+    smell_type: str | None = Field(default=None, alias="smellType")
+    language: str | None = None
+    code_snippet: str | None = Field(default=None, alias="codeSnippet")
+    context_before: str | None = Field(default=None, alias="contextBefore")
+    context_after: str | None = Field(default=None, alias="contextAfter")
+    suggested_refactoring: str | None = Field(default=None, alias="suggestedRefactoring")
+    confidence: float | None = Field(default=None, ge=0, le=1)
     rule_id: str = Field(alias="ruleId")
 
 

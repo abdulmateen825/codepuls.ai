@@ -38,6 +38,10 @@ def explain_finding(request: FindingExplainRequest) -> dict:
 
 
 def _nearby_code_context(request: FindingExplainRequest) -> dict:
+    stored_context = _stored_source_context(request)
+    if stored_context:
+        return stored_context
+
     workspace = scan_workspace(request.scan_id)
     file_path = (workspace / request.file_path).resolve()
     content = ""
@@ -66,6 +70,34 @@ def _nearby_code_context(request: FindingExplainRequest) -> dict:
                 "endLine": max(start_line, end_line),
                 "symbolName": None,
                 "score": None,
+            }
+        ],
+    }
+
+
+def _stored_source_context(request: FindingExplainRequest) -> dict | None:
+    if not any([request.code_snippet, request.context_before, request.context_after]):
+        return None
+
+    start_line = request.start_line or request.line_number or 1
+    end_line = request.end_line or start_line
+    content_lines = []
+    if request.context_before:
+        content_lines.append(request.context_before)
+    if request.code_snippet:
+        content_lines.append(request.code_snippet)
+    if request.context_after:
+        content_lines.append(request.context_after)
+
+    return {
+        "content": "\n".join(content_lines),
+        "fileReferences": [
+            {
+                "filePath": request.file_path,
+                "startLine": start_line,
+                "endLine": max(start_line, end_line),
+                "symbolName": request.smell_type,
+                "score": request.confidence,
             }
         ],
     }

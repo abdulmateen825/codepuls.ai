@@ -18,9 +18,12 @@ The project is split into three applications:
 - Repository cleanup for ignored folders such as `.git`, `node_modules`, `dist`, `build`, `target`, `venv`, `.venv`, and Python cache folders.
 - File metadata extraction for `.py`, `.java`, `.js`, `.ts`, `.jsx`, `.tsx`, `.json`, `.md`, `.yml`, and `.yaml`.
 - Static analysis through Semgrep, Bandit, Ruff, Gitleaks, and ESLint when `package.json` exists.
+- Deterministic code-smell detection for long methods, large classes, high complexity, deep nesting, long parameter lists, duplication, unreachable code, and god objects.
+- Stored bounded source snippets, context, metrics, evidence, and confidence for code-smell findings.
 - Unified finding format with severity, category, title, description, recommendation, file path, line number, and tool name.
 - Internal FastAPI-to-Spring callback for `RUNNING`, `COMPLETED`, and `FAILED` scan results.
 - Spring Boot persistence for scan status, findings, scores, and metadata.
+- Findings dashboard filters for severity, category, smell type, language, and file path.
 
 ## Architecture
 
@@ -35,7 +38,7 @@ Spring Boot backend-core
     v
 FastAPI backend-ai
     |
-    | clone -> clean -> parse -> static analysis
+    | clone -> clean -> parse -> static analysis -> code smells -> source snippets
     |
     | POST /internal/scans/{scanId}/results with INTERNAL_API_KEY
     v
@@ -114,6 +117,17 @@ Configured in [application.yaml](backend-core/src/main/resources/application.yam
 | `QDRANT_HOST` / `QDRANT_PORT` | present in `backend-ai/.env` | Reserved for vector search |
 | `OPENAI_API_KEY` | present in `backend-ai/.env` | Reserved for future LLM features |
 
+Optional code-smell thresholds:
+
+| Variable | Default |
+| --- | --- |
+| `CODE_SMELL_MAX_METHOD_LINES` | `50` |
+| `CODE_SMELL_MAX_CLASS_LINES` | `300` |
+| `CODE_SMELL_MAX_COMPLEXITY` | `10` |
+| `CODE_SMELL_MAX_NESTING_DEPTH` | `4` |
+| `CODE_SMELL_MAX_PARAMETER_COUNT` | `5` |
+| `CODE_SMELL_MIN_DUPLICATE_LINES` | `8` |
+
 ### Frontend
 
 | Variable | Default | Purpose |
@@ -173,6 +187,8 @@ Flyway migrations live in [backend-core/src/main/resources/db/migration](backend
 - `V3__create_repositories.sql`: user-owned repositories
 - `V4__create_scans_and_findings.sql`: scans, findings, indexes, score constraints
 - `V5__add_scan_metadata.sql`: scan metadata JSON storage
+- `V6__create_reports.sql`: generated PDF report metadata
+- `V7__add_code_smell_finding_fields.sql`: code-smell fields, source context, metrics, evidence, and indexes
 
 ## API Overview
 
@@ -194,6 +210,7 @@ Flyway migrations live in [backend-core/src/main/resources/db/migration](backend
 | `GET` | `/api/repositories/{repositoryId}/scans` | List scans for repository |
 | `GET` | `/api/scans/{scanId}` | Get scan detail |
 | `GET` | `/api/scans/{scanId}/findings` | Page findings with optional filters |
+| `GET` | `/api/findings/{findingId}/source` | Return stored bounded source context for a finding |
 
 Authenticated endpoints require:
 
@@ -253,7 +270,14 @@ curl -X POST http://localhost:8080/api/repositories/<repositoryId>/scan `
 ### Fetch Findings
 
 ```powershell
-curl "http://localhost:8080/api/scans/<scanId>/findings?severity=HIGH&category=security&page=0&size=20" `
+curl "http://localhost:8080/api/scans/<scanId>/findings?severity=MEDIUM&category=CODE_SMELL&smellType=LONG_METHOD&language=PYTHON&page=0&size=20" `
+  -H "Authorization: Bearer <accessToken>"
+```
+
+### Fetch Stored Finding Source
+
+```powershell
+curl "http://localhost:8080/api/findings/<findingId>/source" `
   -H "Authorization: Bearer <accessToken>"
 ```
 
@@ -265,7 +289,7 @@ curl "http://localhost:8080/api/scans/<scanId>/findings?severity=HIGH&category=s
 4. FastAPI accepts the request and runs the scan in the background.
 5. FastAPI sends `RUNNING` to Spring.
 6. FastAPI clones the repository into `/tmp/codepulse/{scanId}`.
-7. FastAPI removes ignored folders, builds a file tree, parses supported files, and runs static scanners.
+7. FastAPI removes ignored folders, builds a file tree, parses supported files, runs static scanners, detects code smells, extracts bounded source context, and indexes chunks for RAG when configured.
 8. FastAPI sends `COMPLETED` with findings, metadata, and scores, or `FAILED` with an error message.
 9. Spring stores the final scan status, metadata, scores, and findings.
 
@@ -300,6 +324,25 @@ Integrated scanners:
 - Ruff: Python quality
 - Gitleaks: secret detection
 - ESLint: JavaScript/TypeScript quality when `package.json` exists
+
+## Code-Smell Detection
+
+FastAPI runs deterministic detectors after parsing and before callback. It does not use an LLM for detection.
+
+Supported first-version smell types:
+
+- `LONG_METHOD`
+- `LARGE_CLASS`
+- `HIGH_CYCLOMATIC_COMPLEXITY`
+- `DEEP_NESTING`
+- `LONG_PARAMETER_LIST`
+- `DUPLICATED_CODE`
+- `DEAD_CODE`
+- `GOD_OBJECT`
+
+Code-smell findings use `category = CODE_SMELL` and include `ruleId`, `smellType`, `language`, `startLine`, `endLine`, bounded source snippets, context, metrics, evidence, suggested refactoring, and confidence. Spring stores these fields as nullable columns for backward compatibility with older scanner findings.
+
+The frontend scan detail page can filter by code-smell category, smell type, severity, language, and file path. The source viewer renders stored text safely as escaped React text, highlights affected lines, and never executes or applies suggested fixes.
 
 ## Frontend Routes
 

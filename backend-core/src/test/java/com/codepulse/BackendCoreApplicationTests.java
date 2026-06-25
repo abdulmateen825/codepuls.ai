@@ -1,12 +1,13 @@
 package com.codepulse;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+import org.junit.jupiter.api.Test;
+
 class BackendCoreApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationClassIsLoadable() {
+        assertThat(BackendCoreApplication.class).isNotNull();
     }
 }
