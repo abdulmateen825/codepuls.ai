@@ -46,11 +46,41 @@ public class FindingEntity {
     @Column(name = "line_number")
     private Integer lineNumber;
 
+    @Column(name = "start_line")
+    private Integer startLine;
+
+    @Column(name = "end_line")
+    private Integer endLine;
+
+    @Column(name = "smell_type", length = 80)
+    private String smellType;
+
+    @Column(length = 40)
+    private String language;
+
+    @Column(name = "evidence_json", columnDefinition = "jsonb")
+    private String evidenceJson;
+
+    @Column(name = "metrics_json", columnDefinition = "jsonb")
+    private String metricsJson;
+
     @Column(name = "code_snippet", length = 4000)
     private String codeSnippet;
 
+    @Column(name = "context_before", length = 4000)
+    private String contextBefore;
+
+    @Column(name = "context_after", length = 4000)
+    private String contextAfter;
+
     @Column(length = 2000)
     private String recommendation;
+
+    @Column(name = "suggested_refactoring", length = 2000)
+    private String suggestedRefactoring;
+
+    @Column
+    private Double confidence;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -69,6 +99,50 @@ public class FindingEntity {
             Integer lineNumber,
             String codeSnippet,
             String recommendation) {
+        this(
+                scan,
+                ruleId,
+                category,
+                severity,
+                title,
+                description,
+                filePath,
+                lineNumber,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                codeSnippet,
+                null,
+                null,
+                recommendation,
+                null,
+                null);
+    }
+
+    public FindingEntity(
+            ScanEntity scan,
+            String ruleId,
+            String category,
+            String severity,
+            String title,
+            String description,
+            String filePath,
+            Integer lineNumber,
+            Integer startLine,
+            Integer endLine,
+            String smellType,
+            String language,
+            String evidenceJson,
+            String metricsJson,
+            String codeSnippet,
+            String contextBefore,
+            String contextAfter,
+            String recommendation,
+            String suggestedRefactoring,
+            Double confidence) {
         this.scan = scan;
         this.ruleId = ruleId;
         this.category = category;
@@ -77,8 +151,18 @@ public class FindingEntity {
         this.description = description;
         this.filePath = filePath;
         this.lineNumber = lineNumber;
+        this.startLine = startLine;
+        this.endLine = endLine;
+        this.smellType = smellType;
+        this.language = language;
+        this.evidenceJson = evidenceJson;
+        this.metricsJson = metricsJson;
         this.codeSnippet = codeSnippet;
+        this.contextBefore = contextBefore;
+        this.contextAfter = contextAfter;
         this.recommendation = recommendation;
+        this.suggestedRefactoring = suggestedRefactoring;
+        this.confidence = confidence;
     }
 
     @PrePersist
@@ -122,12 +206,52 @@ public class FindingEntity {
         return lineNumber;
     }
 
+    public Integer getStartLine() {
+        return startLine;
+    }
+
+    public Integer getEndLine() {
+        return endLine;
+    }
+
+    public String getSmellType() {
+        return smellType;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public String getEvidenceJson() {
+        return evidenceJson;
+    }
+
+    public String getMetricsJson() {
+        return metricsJson;
+    }
+
     public String getCodeSnippet() {
         return codeSnippet;
     }
 
+    public String getContextBefore() {
+        return contextBefore;
+    }
+
+    public String getContextAfter() {
+        return contextAfter;
+    }
+
     public String getRecommendation() {
         return recommendation;
+    }
+
+    public String getSuggestedRefactoring() {
+        return suggestedRefactoring;
+    }
+
+    public Double getConfidence() {
+        return confidence;
     }
 
     public Instant getCreatedAt() {

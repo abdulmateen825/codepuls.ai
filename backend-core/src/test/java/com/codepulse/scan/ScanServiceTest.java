@@ -210,10 +210,10 @@ class ScanServiceTest {
         PageRequest pageable = PageRequest.of(0, 20);
 
         when(scanRepository.findById(scanId)).thenReturn(Optional.of(scan));
-        when(findingRepository.findByScanWithFilters(scan, "HIGH", "SECURITY", pageable))
+        when(findingRepository.findByScanWithFilters(scan, "HIGH", "SECURITY", null, null, null, null, pageable))
                 .thenReturn(new PageImpl<>(List.of(finding), pageable, 1));
 
-        FindingPageResponse responses = scanService.getFindings(scanId, " HIGH ", " SECURITY ", pageable, owner);
+        FindingPageResponse responses = scanService.getFindings(scanId, " HIGH ", " SECURITY ", null, null, null, null, pageable, owner);
 
         assertThat(responses.totalElements()).isEqualTo(1);
         assertThat(responses.content().get(0).severity()).isEqualTo("HIGH");
@@ -226,7 +226,7 @@ class ScanServiceTest {
         UUID scanId = UUID.randomUUID();
         when(scanRepository.findById(scanId)).thenReturn(Optional.of(scan(scanId, repository(UUID.randomUUID(), otherUser))));
 
-        assertThatThrownBy(() -> scanService.getFindings(scanId, null, null, PageRequest.of(0, 20), owner))
+        assertThatThrownBy(() -> scanService.getFindings(scanId, null, null, null, null, null, null, PageRequest.of(0, 20), owner))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("FORBIDDEN");
@@ -267,6 +267,68 @@ class ScanServiceTest {
         assertThat(findingsCaptor.getValue()).hasSize(1);
         assertThat(findingsCaptor.getValue().get(0).getRuleId()).isEqualTo("gitleaks:generic-api-key");
         assertThat(scan.getMetadataJson()).contains("totalFindings");
+    }
+
+    @Test
+    void applyScanResultsStoresCodeSmellFields() {
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        UUID scanId = UUID.randomUUID();
+        ScanEntity scan = scan(scanId, repository(UUID.randomUUID(), owner));
+        ScanResultCallbackRequest request = new ScanResultCallbackRequest(
+                ScanStatus.COMPLETED,
+                new ScanResultScoresRequest(98, 100, 98),
+                Map.of("codeSmells", Map.of("totalSmells", 1)),
+                List.of(new ScanResultFindingRequest(
+                        "LONG_METHOD",
+                        "MEDIUM",
+                        "CODE_SMELL",
+                        "Method process is too long",
+                        "The method contains 77 lines.",
+                        "Extract Method",
+                        "src/App.java",
+                        42,
+                        42,
+                        118,
+                        "LONG_METHOD",
+                        "JAVA",
+                        Map.of("lineCount", 77),
+                        Map.of("lineCount", 77),
+                        "code-smell",
+                        "void process() {}",
+                        "class App {",
+                        "}",
+                        "Extract Method",
+                        0.96)),
+                null);
+
+        when(scanRepository.findById(scanId)).thenReturn(Optional.of(scan));
+
+        scanService.applyScanResults(scanId, request);
+
+        ArgumentCaptor<List<FindingEntity>> findingsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(findingRepository).saveAll(findingsCaptor.capture());
+        FindingEntity finding = findingsCaptor.getValue().get(0);
+        assertThat(finding.getRuleId()).isEqualTo("LONG_METHOD");
+        assertThat(finding.getSmellType()).isEqualTo("LONG_METHOD");
+        assertThat(finding.getStartLine()).isEqualTo(42);
+        assertThat(finding.getEndLine()).isEqualTo(118);
+        assertThat(finding.getEvidenceJson()).contains("lineCount");
+        assertThat(finding.getSuggestedRefactoring()).isEqualTo("Extract Method");
+        assertThat(finding.getConfidence()).isEqualTo(0.96);
+    }
+
+    @Test
+    void getFindingSourceRequiresOwnership() {
+        User owner = user(UUID.randomUUID(), "owner@example.com");
+        User otherUser = user(UUID.randomUUID(), "other@example.com");
+        UUID findingId = UUID.randomUUID();
+        FindingEntity finding = finding(findingId, scan(UUID.randomUUID(), repository(UUID.randomUUID(), otherUser)));
+        when(findingRepository.findById(findingId)).thenReturn(Optional.of(finding));
+
+        assertThatThrownBy(() -> scanService.getFindingSource(findingId, owner))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("FORBIDDEN");
     }
 
     @Test

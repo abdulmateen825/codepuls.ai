@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.codepulse.auth.entity.User;
 import com.codepulse.scan.dto.FindingPageResponse;
+import com.codepulse.scan.dto.FindingSourceResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
 import com.codepulse.scan.dto.StartScanRequest;
@@ -72,8 +73,28 @@ public class ScanController {
             @PathVariable UUID scanId,
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String ruleId,
+            @RequestParam(required = false) String smellType,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String filePath,
             Pageable pageable,
             @AuthenticationPrincipal User currentUser) {
-        return scanService.getFindings(scanId, severity, category, pageable, currentUser);
+        return scanService.getFindings(
+                scanId,
+                severity,
+                category,
+                ruleId,
+                smellType,
+                language,
+                filePath,
+                pageable,
+                currentUser);
+    }
+
+    @GetMapping("/findings/{findingId}/source")
+    public FindingSourceResponse getFindingSource(
+            @PathVariable UUID findingId,
+            @AuthenticationPrincipal User currentUser) {
+        return scanService.getFindingSource(findingId, currentUser);
     }
 }

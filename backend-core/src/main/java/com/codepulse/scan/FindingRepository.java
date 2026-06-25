@@ -23,11 +23,19 @@ public interface FindingRepository extends JpaRepository<FindingEntity, UUID> {
             where finding.scan = :scan
               and (:severity is null or lower(finding.severity) = lower(:severity))
               and (:category is null or lower(finding.category) = lower(:category))
+              and (:ruleId is null or lower(finding.ruleId) = lower(:ruleId))
+              and (:smellType is null or lower(finding.smellType) = lower(:smellType))
+              and (:language is null or lower(finding.language) = lower(:language))
+              and (:filePath is null or lower(finding.filePath) like lower(concat('%', :filePath, '%')))
             order by finding.createdAt desc
             """)
     Page<FindingEntity> findByScanWithFilters(
             ScanEntity scan,
             String severity,
             String category,
+            String ruleId,
+            String smellType,
+            String language,
+            String filePath,
             Pageable pageable);
 }

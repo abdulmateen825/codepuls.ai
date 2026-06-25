@@ -17,6 +17,7 @@ import com.codepulse.scan.domain.FindingEntity;
 import com.codepulse.scan.domain.ScanEntity;
 import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
+import com.codepulse.scan.dto.FindingSourceResponse;
 import com.codepulse.scan.dto.ScanResultCallbackRequest;
 import com.codepulse.scan.dto.ScanResultFindingRequest;
 import com.codepulse.scan.dto.ScanResultScoresRequest;
@@ -89,6 +90,10 @@ public class ScanService {
             UUID scanId,
             String severity,
             String category,
+            String ruleId,
+            String smellType,
+            String language,
+            String filePath,
             Pageable pageable,
             User currentUser) {
         ScanEntity scan = findScanForAccess(scanId, currentUser);
@@ -96,10 +101,27 @@ public class ScanService {
                 scan,
                 normalizeFilter(severity),
                 normalizeFilter(category),
+                normalizeFilter(ruleId),
+                normalizeFilter(smellType),
+                normalizeFilter(language),
+                normalizeFilter(filePath),
                 pageable)
                 .map(FindingResponse::from);
 
         return FindingPageResponse.from(findings);
+    }
+
+    @Transactional(readOnly = true)
+    public FindingSourceResponse getFindingSource(UUID findingId, User currentUser) {
+        requireAuthenticated(currentUser);
+        FindingEntity finding = findingRepository.findById(findingId)
+                .orElseThrow(() -> ApiException.notFound("Finding was not found."));
+
+        if (!finding.getScan().getRepository().getOwner().getId().equals(currentUser.getId())) {
+            throw ApiException.forbidden("You do not have access to this finding.");
+        }
+
+        return FindingSourceResponse.from(finding);
     }
 
     @Transactional
@@ -176,8 +198,18 @@ public class ScanService {
                         trimToMax(finding.description().trim(), 2000),
                         trimToMax(finding.filePath().trim(), 1000),
                         finding.normalizedLineNumber(),
+                        finding.normalizedStartLine(),
+                        finding.normalizedEndLine(),
+                        trimToMax(finding.smellType(), 80),
+                        trimToMax(finding.language(), 40),
+                        toJson(finding.evidence()),
+                        toJson(finding.metrics()),
                         trimToMax(finding.codeSnippet(), 4000),
-                        trimToMax(finding.recommendation(), 2000)))
+                        trimToMax(finding.contextBefore(), 4000),
+                        trimToMax(finding.contextAfter(), 4000),
+                        trimToMax(finding.recommendation(), 2000),
+                        trimToMax(finding.suggestedRefactoring(), 2000),
+                        finding.confidence()))
                 .toList();
     }
 
@@ -186,6 +218,17 @@ public class ScanService {
             return objectMapper.writeValueAsString(request.normalizedMetadata());
         } catch (JsonProcessingException exception) {
             throw ApiException.badRequest("Scan metadata must be valid JSON.");
+        }
+    }
+
+    private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw ApiException.badRequest("Finding JSON fields must be valid JSON.");
         }
     }
 

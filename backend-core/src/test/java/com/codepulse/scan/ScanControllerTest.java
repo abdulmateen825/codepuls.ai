@@ -33,6 +33,7 @@ import com.codepulse.common.exception.ApiException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codepulse.scan.dto.FindingPageResponse;
 import com.codepulse.scan.dto.FindingResponse;
+import com.codepulse.scan.dto.FindingSourceResponse;
 import com.codepulse.scan.dto.ScanDetailResponse;
 import com.codepulse.scan.dto.ScanSummaryResponse;
 import com.codepulse.scan.dto.StartScanRequest;
@@ -154,6 +155,10 @@ class ScanControllerTest {
                 eq(scanId),
                 eq("HIGH"),
                 eq("SECURITY"),
+                eq("LONG_METHOD"),
+                eq("LONG_METHOD"),
+                eq("JAVA"),
+                eq("App.java"),
                 any(Pageable.class),
                 nullable(User.class)))
                 .thenReturn(new FindingPageResponse(List.of(finding), 1, 1, 0, 20));
@@ -161,9 +166,14 @@ class ScanControllerTest {
         mockMvc.perform(get("/api/scans/{scanId}/findings", scanId)
                 .param("severity", "HIGH")
                 .param("category", "SECURITY")
+                .param("ruleId", "LONG_METHOD")
+                .param("smellType", "LONG_METHOD")
+                .param("language", "JAVA")
+                .param("filePath", "App.java")
                 .with(user(currentUser())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].severity").value("HIGH"))
+                .andExpect(jsonPath("$.content[0].smellType").value("LONG_METHOD"))
                 .andExpect(jsonPath("$.totalElements").value(1));
     }
 
@@ -174,6 +184,10 @@ class ScanControllerTest {
                 eq(scanId),
                 isNull(),
                 isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
                 any(Pageable.class),
                 nullable(User.class)))
                 .thenReturn(new FindingPageResponse(List.of(), 0, 0, 0, 20));
@@ -182,6 +196,27 @@ class ScanControllerTest {
                 .with(user(currentUser())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void getFindingSourceReturnsStoredBoundedSource() throws Exception {
+        UUID findingId = UUID.randomUUID();
+        when(scanService.getFindingSource(eq(findingId), nullable(User.class)))
+                .thenReturn(new FindingSourceResponse(
+                        findingId,
+                        "src/main/java/App.java",
+                        40,
+                        42,
+                        "String secret = \"value\";",
+                        "class App {",
+                        "}"));
+
+        mockMvc.perform(get("/api/findings/{findingId}/source", findingId)
+                .with(user(currentUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.findingId").value(findingId.toString()))
+                .andExpect(jsonPath("$.startLine").value(40))
+                .andExpect(jsonPath("$.codeSnippet").value("String secret = \"value\";"));
     }
 
     private User currentUser() {
@@ -232,8 +267,18 @@ class ScanControllerTest {
                 "A hardcoded secret was found.",
                 "src/main/java/App.java",
                 42,
+                40,
+                42,
+                "LONG_METHOD",
+                "JAVA",
+                "{\"lineCount\":77}",
+                "{\"lineCount\":77}",
                 "String secret = \"value\";",
+                "class App {",
+                "}",
                 "Move secrets into managed configuration.",
+                "Extract Method",
+                0.91,
                 Instant.parse("2026-06-15T00:00:00Z"));
     }
 }

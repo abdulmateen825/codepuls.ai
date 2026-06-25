@@ -60,6 +60,15 @@ public class AiInteractionService {
                 finding.getRecommendation(),
                 finding.getFilePath(),
                 finding.getLineNumber(),
+                finding.getStartLine(),
+                finding.getEndLine(),
+                finding.getSmellType(),
+                finding.getLanguage(),
+                finding.getCodeSnippet(),
+                finding.getContextBefore(),
+                finding.getContextAfter(),
+                finding.getSuggestedRefactoring(),
+                finding.getConfidence(),
                 finding.getRuleId()));
     }
 

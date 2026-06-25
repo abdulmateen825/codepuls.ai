@@ -88,6 +88,15 @@ public class AiServiceClient {
             String recommendation,
             String filePath,
             Integer lineNumber,
+            Integer startLine,
+            Integer endLine,
+            String smellType,
+            String language,
+            String codeSnippet,
+            String contextBefore,
+            String contextAfter,
+            String suggestedRefactoring,
+            Double confidence,
             String ruleId) {
     }
 
