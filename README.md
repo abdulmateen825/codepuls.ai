@@ -1,335 +1,38 @@
 # CodePulse AI
 
-CodePulse AI is a repository intelligence platform for registering GitHub repositories, launching static-analysis scans, and reviewing repository health from a SaaS-style dashboard.
+CodePulse AI is an open-source repository intelligence platform for registering GitHub repositories, launching static-analysis scans, detecting code smells, reviewing repository health, chatting with repository context, and generating PDF reports.
 
-The project is split into three applications:
+The application is intentionally split into three services:
 
-- `backend-core`: Spring Boot API for authentication, repository ownership, scan records, finding persistence, and internal callbacks.
-- `backend-ai`: FastAPI worker for cloning repositories, parsing source files, running static-analysis tools, and sending scan results back to Spring Boot.
-- `frontend`: Next.js dashboard for repository management and scan history.
+```text
+Browser -> Next.js frontend -> Spring Boot core backend -> FastAPI AI service
+```
 
-## Current Capabilities
+The frontend must call Spring Boot only. FastAPI is an internal service and should never be exposed directly to browsers.
+
+## Main Features
 
 - JWT authentication with access and refresh tokens.
 - User-owned GitHub repository registration.
-- Repository list, detail, delete, loading, error, and empty states in the dashboard.
+- Repository dashboard with list, detail, delete, empty, loading, and error states.
 - Scan initiation from Spring Boot to FastAPI.
-- Public GitHub repository cloning into `/tmp/codepulse/{scanId}`.
-- Repository cleanup for ignored folders such as `.git`, `node_modules`, `dist`, `build`, `target`, `venv`, `.venv`, and Python cache folders.
-- File metadata extraction for `.py`, `.java`, `.js`, `.ts`, `.jsx`, `.tsx`, `.json`, `.md`, `.yml`, and `.yaml`.
-- Static analysis through Semgrep, Bandit, Ruff, Gitleaks, and ESLint when `package.json` exists.
-- Deterministic code-smell detection for long methods, large classes, high complexity, deep nesting, long parameter lists, duplication, unreachable code, and god objects.
-- Stored bounded source snippets, context, metrics, evidence, and confidence for code-smell findings.
-- Unified finding format with severity, category, title, description, recommendation, file path, line number, and tool name.
-- Internal FastAPI-to-Spring callback for `RUNNING`, `COMPLETED`, and `FAILED` scan results.
-- Spring Boot persistence for scan status, findings, scores, and metadata.
-- Findings dashboard filters for severity, category, smell type, language, and file path.
-
-## Architecture
-
-```text
-Next.js frontend
-    |
-    | JWT-authenticated /api requests
-    v
-Spring Boot backend-core
-    |
-    | POST /internal/analyze with INTERNAL_API_KEY
-    v
-FastAPI backend-ai
-    |
-    | clone -> clean -> parse -> static analysis -> code smells -> source snippets
-    |
-    | POST /internal/scans/{scanId}/results with INTERNAL_API_KEY
-    v
-Spring Boot backend-core
-    |
-    | persist scan status, findings, metadata, scores
-    v
-PostgreSQL
-```
-
-Supporting services are provided by Docker Compose:
-
-- PostgreSQL on `localhost:5432`
-- Redis on `localhost:6379`
-- Qdrant on `localhost:6333`
-
-Redis and Qdrant are present for planned worker/RAG capabilities. The current implemented repository and scan persistence lives in PostgreSQL.
-
-## Repository Layout
-
-```text
-.
-|-- backend-core/        # Spring Boot API, auth, repositories, scans, findings
-|-- backend-ai/          # FastAPI analysis worker
-|-- frontend/            # Next.js dashboard
-|-- docker-compose.yml   # Postgres, Redis, Qdrant
-`-- README.md
-```
-
-## Prerequisites
-
-- Java 21
-- Maven or the Maven wrapper
-- Python 3.11+
-- Node.js 20+
-- Docker Desktop
-- Git
-
-Optional scanner CLIs for full local analysis:
-
-- `semgrep`
-- `bandit`
-- `ruff`
-- `gitleaks`
-- `npx`/ESLint for JavaScript and TypeScript repositories
-
-If a scanner is not installed, the FastAPI analysis runner marks that tool as skipped instead of failing the entire scan.
-
-## Environment Variables
-
-### Spring Boot
-
-Configured in [application.yaml](backend-core/src/main/resources/application.yaml).
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `SERVER_PORT` | `8080` | Spring Boot port |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/codepulse` | PostgreSQL JDBC URL |
-| `SPRING_DATASOURCE_USERNAME` | `codepulse` | Database user |
-| `SPRING_DATASOURCE_PASSWORD` | `codepulse123` | Database password |
-| `JWT_SECRET` | `your-super-secret-key-change-this-to-something-long` | JWT signing secret |
-| `JWT_EXPIRATION` | `86400000` | Access token lifetime in ms |
-| `JWT_REFRESH_EXPIRATION` | `604800000` | Refresh token lifetime in ms |
-| `FASTAPI_BASE_URL` | `http://localhost:8000` | FastAPI internal base URL |
-| `INTERNAL_API_KEY` | `change-me-internal-api-key` | Shared internal service key |
-| `FRONTEND_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS origin |
-
-### FastAPI
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `INTERNAL_API_KEY` | `change-me-internal-api-key` | Must match Spring Boot |
-| `SPRING_BOOT_BASE_URL` | `http://localhost:8080` | Spring callback base URL |
-| `DATABASE_URL` | present in `backend-ai/.env` | Reserved for future AI persistence |
-| `REDIS_URL` | present in `backend-ai/.env` | Reserved for future workers |
-| `QDRANT_HOST` / `QDRANT_PORT` | present in `backend-ai/.env` | Reserved for vector search |
-| `OPENAI_API_KEY` | present in `backend-ai/.env` | Reserved for future LLM features |
-
-Optional code-smell thresholds:
-
-| Variable | Default |
-| --- | --- |
-| `CODE_SMELL_MAX_METHOD_LINES` | `50` |
-| `CODE_SMELL_MAX_CLASS_LINES` | `300` |
-| `CODE_SMELL_MAX_COMPLEXITY` | `10` |
-| `CODE_SMELL_MAX_NESTING_DEPTH` | `4` |
-| `CODE_SMELL_MAX_PARAMETER_COUNT` | `5` |
-| `CODE_SMELL_MIN_DUPLICATE_LINES` | `8` |
-
-### Frontend
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Browser-facing Spring Boot API URL |
-
-## Local Development
-
-### 1. Start infrastructure
-
-```powershell
-docker compose up -d
-```
-
-This starts PostgreSQL, Redis, and Qdrant.
-
-### 2. Start Spring Boot
-
-```powershell
-cd backend-core
-mvn spring-boot:run
-```
-
-If your Maven wrapper works in your environment, this is equivalent:
-
-```powershell
-cd backend-core
-.\mvnw.cmd spring-boot:run
-```
-
-Spring Boot runs on `http://localhost:8080`.
-
-### 3. Start FastAPI
-
-```powershell
-cd backend-ai
-.\venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --port 8000
-```
-
-FastAPI runs on `http://localhost:8000`.
-
-### 4. Start the frontend
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-The dashboard runs on `http://localhost:3000`.
-
-## Database Migrations
-
-Flyway migrations live in [backend-core/src/main/resources/db/migration](backend-core/src/main/resources/db/migration).
-
-- `V3__create_repositories.sql`: user-owned repositories
-- `V4__create_scans_and_findings.sql`: scans, findings, indexes, score constraints
-- `V5__add_scan_metadata.sql`: scan metadata JSON storage
-- `V6__create_reports.sql`: generated PDF report metadata
-- `V7__add_code_smell_finding_fields.sql`: code-smell fields, source context, metrics, evidence, and indexes
-
-## API Overview
-
-### Public Spring Boot Endpoints
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/api/health` | Spring Boot health |
-| `GET` | `/api/system/ai-health` | FastAPI health proxy |
-| `POST` | `/api/auth/register` | Register user |
-| `POST` | `/api/auth/login` | Login and receive tokens |
-| `POST` | `/api/auth/refresh` | Refresh tokens |
-| `POST` | `/api/repositories` | Add GitHub repository |
-| `GET` | `/api/repositories` | List current user's repositories |
-| `GET` | `/api/repositories/{id}` | Get one owned repository |
-| `DELETE` | `/api/repositories/{id}` | Delete one owned repository |
-| `POST` | `/api/repositories/{repositoryId}/scans` | Start scan with default branch |
-| `POST` | `/api/repositories/{repositoryId}/scan` | Start scan with optional branch body |
-| `GET` | `/api/repositories/{repositoryId}/scans` | List scans for repository |
-| `GET` | `/api/scans/{scanId}` | Get scan detail |
-| `GET` | `/api/scans/{scanId}/findings` | Page findings with optional filters |
-| `GET` | `/api/findings/{findingId}/source` | Return stored bounded source context for a finding |
-
-Authenticated endpoints require:
-
-```http
-Authorization: Bearer <accessToken>
-```
-
-### Internal Endpoints
-
-These endpoints are service-to-service only and require:
-
-```http
-Authorization: Bearer <INTERNAL_API_KEY>
-```
-
-| Service | Method | Endpoint | Description |
-| --- | --- | --- | --- |
-| FastAPI | `POST` | `/internal/analyze` | Accept scan work from Spring Boot |
-| Spring Boot | `POST` | `/internal/scans/{scanId}/results` | Persist scan callback results |
-
-## Example Requests
-
-### Register and Login
-
-```powershell
-curl -X POST http://localhost:8080/api/auth/register `
-  -H "Content-Type: application/json" `
-  -d "{\"email\":\"user@example.com\",\"fullName\":\"CodePulse User\",\"password\":\"password123\"}"
-```
-
-```powershell
-curl -X POST http://localhost:8080/api/auth/login `
-  -H "Content-Type: application/json" `
-  -d "{\"email\":\"user@example.com\",\"password\":\"password123\"}"
-```
-
-### Add a Repository
-
-```powershell
-curl -X POST http://localhost:8080/api/repositories `
-  -H "Authorization: Bearer <accessToken>" `
-  -H "Content-Type: application/json" `
-  -d "{\"repositoryUrl\":\"https://github.com/spring-projects/spring-petclinic\"}"
-```
-
-GitHub HTTPS URLs and SSH-style URLs such as `git@github.com:owner/repo.git` are accepted by Spring Boot. FastAPI cloning currently uses normalized public HTTPS GitHub URLs.
-
-### Start a Scan
-
-```powershell
-curl -X POST http://localhost:8080/api/repositories/<repositoryId>/scan `
-  -H "Authorization: Bearer <accessToken>" `
-  -H "Content-Type: application/json" `
-  -d "{\"branch\":\"main\"}"
-```
-
-### Fetch Findings
-
-```powershell
-curl "http://localhost:8080/api/scans/<scanId>/findings?severity=MEDIUM&category=CODE_SMELL&smellType=LONG_METHOD&language=PYTHON&page=0&size=20" `
-  -H "Authorization: Bearer <accessToken>"
-```
-
-### Fetch Stored Finding Source
-
-```powershell
-curl "http://localhost:8080/api/findings/<findingId>/source" `
-  -H "Authorization: Bearer <accessToken>"
-```
-
-## Scan Lifecycle
-
-1. A user starts a scan from Spring Boot.
-2. Spring creates a `QUEUED` scan row.
-3. Spring dispatches work to FastAPI with the shared internal API key.
-4. FastAPI accepts the request and runs the scan in the background.
-5. FastAPI sends `RUNNING` to Spring.
-6. FastAPI clones the repository into `/tmp/codepulse/{scanId}`.
-7. FastAPI removes ignored folders, builds a file tree, parses supported files, runs static scanners, detects code smells, extracts bounded source context, and indexes chunks for RAG when configured.
-8. FastAPI sends `COMPLETED` with findings, metadata, and scores, or `FAILED` with an error message.
-9. Spring stores the final scan status, metadata, scores, and findings.
-
-Supported statuses:
-
-- `QUEUED`
-- `RUNNING`
-- `COMPLETED`
-- `FAILED`
-
-## Static Analysis
-
-FastAPI normalizes all scanner output into this shape:
-
-```json
-{
-  "severity": "HIGH",
-  "category": "security",
-  "title": "generic-api-key",
-  "description": "A secret was detected.",
-  "recommendation": "Rotate the secret.",
-  "filePath": ".env",
-  "lineNumber": 1,
-  "toolName": "gitleaks"
-}
-```
-
-Integrated scanners:
-
-- Semgrep: static analysis
-- Bandit: Python security
-- Ruff: Python quality
-- Gitleaks: secret detection
-- ESLint: JavaScript/TypeScript quality when `package.json` exists
-
-## Code-Smell Detection
-
-FastAPI runs deterministic detectors after parsing and before callback. It does not use an LLM for detection.
-
-Supported first-version smell types:
+- Public GitHub repository cloning into a temporary workspace.
+- Source-file discovery and metadata extraction for Python, Java, JavaScript, TypeScript, JSON, Markdown, YAML, and related extensions.
+- Static analysis through Semgrep, Bandit, Ruff, Gitleaks, and ESLint when available.
+- Deterministic code-smell detection.
+- Stored bounded source snippets and line context for findings.
+- Health score calculation.
+- Repository chat through Spring Boot and FastAPI internal calls.
+- AI finding explanations.
+- PDF report generation and download.
+- PostgreSQL persistence for users, repositories, scans, findings, reports, and metadata.
+- Qdrant integration for repository code chunks and semantic retrieval.
+
+## Code-Smell Functionality
+
+Code-smell detection runs in FastAPI after repository parsing and before the scan callback to Spring Boot. Detection is deterministic and does not use an LLM as the primary detector.
+
+Current smell types:
 
 - `LONG_METHOD`
 - `LARGE_CLASS`
@@ -340,25 +43,387 @@ Supported first-version smell types:
 - `DEAD_CODE`
 - `GOD_OBJECT`
 
-Code-smell findings use `category = CODE_SMELL` and include `ruleId`, `smellType`, `language`, `startLine`, `endLine`, bounded source snippets, context, metrics, evidence, suggested refactoring, and confidence. Spring stores these fields as nullable columns for backward compatibility with older scanner findings.
+Code-smell findings use:
 
-The frontend scan detail page can filter by code-smell category, smell type, severity, language, and file path. The source viewer renders stored text safely as escaped React text, highlights affected lines, and never executes or applies suggested fixes.
+```json
+{
+  "category": "CODE_SMELL",
+  "ruleId": "LONG_METHOD",
+  "smellType": "LONG_METHOD",
+  "severity": "MEDIUM",
+  "language": "PYTHON",
+  "filePath": "src/app.py",
+  "startLine": 10,
+  "endLine": 80
+}
+```
 
-## Frontend Routes
+Spring Boot stores code-smell fields as nullable columns so older scanner findings remain compatible. The frontend supports filtering by category, smell type, severity, language, and file path.
 
-| Route | Status |
+## Technology Stack
+
+| Area | Technology |
 | --- | --- |
-| `/` | Redirects to `/repositories` through dashboard flow |
-| `/repositories` | Repository dashboard |
-| `/repositories/[id]` | Repository detail and scan history |
-| `/dashboard` | Redirects to `/repositories` |
-| `/login` | Placeholder page |
-| `/register` | Placeholder page |
-| `/chat`, `/reports`, `/settings` | Placeholder dashboard sections |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS, TanStack Query, Recharts |
+| Core backend | Spring Boot, Spring Security, JPA, Flyway, PostgreSQL |
+| AI/analysis backend | FastAPI, Python, deterministic parsers/scanners |
+| Static analysis | Semgrep, Bandit, Ruff, Gitleaks, ESLint |
+| Vector search | Qdrant |
+| Infrastructure | Docker Compose, service Dockerfiles, Nginx reverse proxy |
 
-The implemented dashboard uses Next.js App Router, TanStack Query, Tailwind CSS, lucide-react icons, and local shadcn-style UI primitives.
+## Service Responsibilities
 
-## Testing
+### `frontend`
+
+- Browser UI.
+- Calls Spring Boot `/api` endpoints.
+- Does not call FastAPI directly.
+- Renders repository, scan, finding, chat, and report experiences.
+
+### `backend-core`
+
+- Authentication and JWT issuance.
+- Repository ownership and access control.
+- Scan records and finding persistence.
+- Internal callback receiver from FastAPI.
+- Report metadata and download endpoint.
+- Public API used by the frontend.
+
+### `backend-ai`
+
+- Internal FastAPI service.
+- Clones public GitHub repositories.
+- Discovers and parses files.
+- Runs static-analysis tools.
+- Runs code-smell detectors.
+- Calculates health score inputs.
+- Generates PDF bytes.
+- Calls Spring Boot internal callback endpoints.
+
+## Folder Structure
+
+```text
+.
+|-- backend-ai/                 # FastAPI analysis service
+|   `-- app/
+|-- backend-core/               # Spring Boot API
+|   `-- src/
+|-- docs/                       # Deployment and operations docs
+|-- frontend/                   # Next.js dashboard
+|   `-- src/
+|-- .github/                    # Issue and PR templates
+|-- nginx/                      # Reverse proxy template
+|-- scripts/                    # Test, smoke, backup, and restore scripts
+|-- docker-compose.yml          # Local infrastructure services
+|-- docker-compose.prod.yml     # Production-ready Compose template
+|-- CONTRIBUTING.md
+|-- SECURITY.md
+|-- CODE_OF_CONDUCT.md
+|-- LICENSE
+`-- README.md
+```
+
+## Prerequisites
+
+- Java 21
+- Maven or the Maven wrapper
+- Python 3.11+
+- Node.js 20+
+- Docker Desktop or Docker Engine
+- Git
+
+Optional scanner CLIs for full local analysis:
+
+- `semgrep`
+- `bandit`
+- `ruff`
+- `gitleaks`
+- `npx` and ESLint for JavaScript/TypeScript repositories
+
+If a scanner is missing, FastAPI marks that tool as skipped instead of failing the full scan.
+
+## Local Installation
+
+### 1. Clone the repository
+
+```powershell
+git clone <repository-url>
+cd codepuls.ai
+```
+
+### 2. Start infrastructure
+
+```powershell
+docker compose up -d
+```
+
+By default, local Compose starts PostgreSQL, Redis, and Qdrant. To build and run all app services locally through Docker, use the `app` profile:
+
+```powershell
+docker compose --profile app up -d --build
+```
+
+### 3. Start Spring Boot
+
+```powershell
+cd backend-core
+mvn spring-boot:run
+```
+
+If your Maven wrapper works locally:
+
+```powershell
+cd backend-core
+.\mvnw.cmd spring-boot:run
+```
+
+Spring Boot runs on `http://localhost:8080`.
+
+### 4. Start FastAPI
+
+```powershell
+cd backend-ai
+.\venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --port 8000
+```
+
+FastAPI runs on `http://localhost:8000`.
+
+### 5. Start Next.js
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend runs on `http://localhost:3000`.
+
+## Manual Local Setup
+
+If you do not use Docker for infrastructure, provide:
+
+- PostgreSQL database named `codepulse`.
+- Redis reachable by `REDIS_URL`.
+- Qdrant reachable by `QDRANT_URL` or `QDRANT_HOST` and `QDRANT_PORT`.
+
+Then configure Spring Boot and FastAPI environment variables as described below.
+
+## Docker Local Setup
+
+Infrastructure-only:
+
+```powershell
+docker compose up -d
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+Full local app stack:
+
+```powershell
+docker compose --profile app up -d --build
+docker compose --profile app ps
+docker compose --profile app logs -f
+docker compose --profile app down
+```
+
+Production template validation:
+
+```powershell
+docker compose --env-file .env.example -f docker-compose.prod.yml config --quiet
+```
+
+## Environment Variables
+
+Do not commit real secrets. Copy `.env.example` to `.env` for Docker Compose or use the variable names below in your local shell.
+
+### Frontend
+
+| Variable | Purpose | Safe local example |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Browser-facing Spring Boot URL | `http://localhost:8080` |
+| `CORE_API_BASE_URL` | Server-rendered health page Spring Boot URL | `http://localhost:8080` |
+
+Only `NEXT_PUBLIC_*` variables are exposed to the browser. Never put internal API keys or database credentials in frontend env vars.
+
+### Spring Boot
+
+| Variable | Purpose | Safe local example |
+| --- | --- | --- |
+| `SERVER_PORT` | HTTP port | `8080` |
+| `SPRING_DATASOURCE_URL` | PostgreSQL JDBC URL | `jdbc:postgresql://localhost:5432/codepulse` |
+| `SPRING_DATASOURCE_USERNAME` | Database user | `codepulse` |
+| `SPRING_DATASOURCE_PASSWORD` | Database password | `change-me-local` |
+| `JWT_SECRET` | JWT signing secret | long random local value |
+| `JWT_EXPIRATION` | Access token lifetime in ms | `86400000` |
+| `JWT_REFRESH_EXPIRATION` | Refresh token lifetime in ms | `604800000` |
+| `FASTAPI_BASE_URL` | Internal FastAPI URL | `http://localhost:8000` |
+| `INTERNAL_API_KEY` | Shared internal service key | long random local value |
+| `FRONTEND_ALLOWED_ORIGINS` | CORS origins | `http://localhost:3000` |
+| `GITHUB_CLIENT_ID` | Optional OAuth client id | empty for local |
+| `GITHUB_CLIENT_SECRET` | Optional OAuth client secret | empty for local |
+
+Optional open-source mode variables:
+
+| Variable | Purpose | Safe local example |
+| --- | --- | --- |
+| `OPEN_SOURCE_MODE` | Marks the app as community/self-hosted | `true` |
+| `ENFORCE_USAGE_LIMITS` | Enables optional usage caps | `false` |
+| `MAX_SCANS_PER_USER` | Maximum stored scans per owner when limits are enabled | `0` |
+| `MAX_REPOSITORY_SIZE_MB` | Optional FastAPI repository size cap, `0` disables | `0` |
+| `MAX_CONCURRENT_SCANS` | Reserved operational cap | `0` |
+
+### FastAPI
+
+| Variable | Purpose | Safe local example |
+| --- | --- | --- |
+| `INTERNAL_API_KEY` | Must match Spring Boot | long random local value |
+| `SPRING_BOOT_BASE_URL` | Spring callback URL | `http://localhost:8080` |
+| `QDRANT_URL` | Qdrant URL | `http://localhost:6333` |
+| `QDRANT_HOST` | Qdrant host fallback | `localhost` |
+| `QDRANT_PORT` | Qdrant port fallback | `6333` |
+| `QDRANT_COLLECTION` | Vector collection | `codepulse_chunks` |
+| `REDIS_URL` | Redis URL | `redis://localhost:6379` |
+| `LLM_PROVIDER` | `fallback` or `openai` | `fallback` |
+| `OPENAI_API_KEY` | Optional OpenAI key | empty unless used |
+| `EMBEDDING_PROVIDER` | `local` or `openai` | `local` |
+| `EMBEDDING_MODEL` | Local embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
+
+Code-smell threshold variables:
+
+- `CODE_SMELL_MAX_METHOD_LINES`
+- `CODE_SMELL_MAX_CLASS_LINES`
+- `CODE_SMELL_MAX_COMPLEXITY`
+- `CODE_SMELL_MAX_NESTING_DEPTH`
+- `CODE_SMELL_MAX_PARAMETER_COUNT`
+- `CODE_SMELL_MIN_DUPLICATE_LINES`
+- `CODE_SMELL_GOD_OBJECT_MIN_METHODS`
+- `CODE_SMELL_GOD_OBJECT_MIN_FIELDS`
+- `CODE_SMELL_MAX_SNIPPET_LINES`
+- `CODE_SMELL_CONTEXT_LINES`
+- `CODE_SMELL_MAX_FILE_BYTES`
+- `CODE_SMELL_MAX_SOURCE_CHARS`
+
+FastAPI deployment variables:
+
+| Variable | Purpose | Safe local example |
+| --- | --- | --- |
+| `REPOSITORY_CLONE_TIMEOUT_SECONDS` | Git clone timeout | `180` |
+| `MAX_REPOSITORY_SIZE_MB` | Optional repository size cap | `0` |
+| `MAX_FILE_COUNT` | Maximum parsed files | `5000` |
+| `MAX_INDIVIDUAL_FILE_SIZE_BYTES` | Maximum parsed file size | `1000000` |
+| `MAX_SCAN_TIME_SECONDS` | Reserved scan runtime cap | `0` |
+| `CODEPULSE_WORKSPACE_ROOT` | Temporary clone workspace | `/tmp/codepulse` |
+| `REPORT_PATH` | Generated report workspace | `/tmp/codepulse-reports` |
+| `SCANNER_TIMEOUT_SECONDS` | Per-tool scanner timeout | `120` |
+| `GIT_PATH` | Git executable path | `git` |
+| `SEMGREP_PATH` | Semgrep executable path | `semgrep` |
+| `BANDIT_PATH` | Bandit executable path | `bandit` |
+| `RUFF_PATH` | Ruff executable path | `ruff` |
+| `GITLEAKS_PATH` | Gitleaks executable path | `gitleaks` |
+| `NPX_PATH` | NPX executable path | `npx` |
+
+## Database Migrations
+
+Flyway migrations live in `backend-core/src/main/resources/db/migration`.
+
+| Migration | Purpose |
+| --- | --- |
+| `V3__create_repositories.sql` | User-owned repositories |
+| `V4__create_scans_and_findings.sql` | Scans, findings, indexes, score constraints |
+| `V5__add_scan_metadata.sql` | Scan metadata JSON |
+| `V6__create_reports.sql` | PDF report storage |
+| `V7__add_code_smell_finding_fields.sql` | Code-smell metadata and source context |
+
+Spring Boot runs Flyway during startup.
+
+## API Flow
+
+### Scan initiation
+
+```text
+Frontend
+  -> POST /api/repositories/{repositoryId}/scan
+Spring Boot
+  -> creates QUEUED scan
+  -> POST FastAPI /internal/analyze with INTERNAL_API_KEY
+FastAPI
+  -> clones, parses, scans, detects code smells
+  -> POST Spring /internal/scans/{scanId}/results
+Spring Boot
+  -> stores status, metadata, scores, findings
+Frontend
+  -> GET /api/scans/{scanId}
+  -> GET /api/scans/{scanId}/findings
+```
+
+### Important public Spring Boot endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Core health |
+| `GET` | `/api/system/ai-health` | FastAPI health through Spring |
+| `POST` | `/api/auth/register` | Register |
+| `POST` | `/api/auth/login` | Login |
+| `POST` | `/api/auth/refresh` | Refresh tokens |
+| `POST` | `/api/repositories` | Add repository |
+| `GET` | `/api/repositories` | List repositories |
+| `GET` | `/api/repositories/{id}` | Repository detail |
+| `DELETE` | `/api/repositories/{id}` | Delete repository |
+| `POST` | `/api/repositories/{repositoryId}/scan` | Start scan |
+| `GET` | `/api/repositories/{repositoryId}/scans` | Scan history |
+| `GET` | `/api/scans/{scanId}` | Scan detail |
+| `GET` | `/api/scans/{scanId}/findings` | Findings with filters |
+| `GET` | `/api/findings/{findingId}/source` | Stored bounded source context |
+| `POST` | `/api/findings/{findingId}/explain` | Explain finding |
+| `POST` | `/api/repositories/{repositoryId}/chat` | Repository chat |
+| `POST` | `/api/scans/{scanId}/reports` | Create report |
+| `GET` | `/api/reports` | List reports |
+| `GET` | `/api/reports/{reportId}/download` | Download report |
+
+### Internal endpoints
+
+Internal endpoints require:
+
+```http
+Authorization: Bearer <INTERNAL_API_KEY>
+```
+
+| Service | Method | Endpoint | Purpose |
+| --- | --- | --- | --- |
+| FastAPI | `POST` | `/internal/analyze` | Accept scan work |
+| FastAPI | `POST` | `/internal/repositories/chat` | Answer repository chat |
+| FastAPI | `POST` | `/internal/findings/explain` | Explain a finding |
+| FastAPI | `POST` | `/internal/reports/pdf` | Generate report bytes |
+| Spring Boot | `POST` | `/internal/scans/{scanId}/results` | Receive scan callback |
+
+## Security Model
+
+- The frontend calls Spring Boot only.
+- FastAPI is internal and protected by `INTERNAL_API_KEY`.
+- Spring Boot enforces authenticated ownership for user repositories, scans, findings, chat, and reports.
+- Static-analysis tools are launched with argument arrays, not shell strings.
+- Cloned repository code is parsed and scanned but never executed.
+- Finding source responses return stored bounded snippets, not full repository files.
+- Production deployments should expose only Nginx publicly.
+- PostgreSQL, Redis, Qdrant, and FastAPI should stay on private Docker networks.
+- JWT secrets, database passwords, internal API keys, Redis credentials, Qdrant credentials, and LLM keys must never be exposed to the browser.
+
+## Testing Commands
+
+Run the full local verification suite:
+
+```powershell
+.\scripts\test-all.ps1
+```
+
+On POSIX shells:
+
+```bash
+scripts/test-all.sh
+```
 
 ### Spring Boot
 
@@ -367,19 +432,18 @@ cd backend-core
 mvn test
 ```
 
-Targeted scan/repository tests:
+Targeted tests:
 
 ```powershell
 cd backend-core
-mvn test "-Dtest=RepositoryServiceTest,RepositoryControllerTest,ScanServiceTest,ScanControllerTest,InternalScanResultControllerTest"
+mvn test "-Dtest=RepositoryServiceTest,RepositoryControllerTest,ScanServiceTest,ScanControllerTest,InternalScanResultControllerTest,AiInteractionServiceTest,ReportServiceTest"
 ```
 
 ### FastAPI
 
 ```powershell
 cd backend-ai
-.\venv\Scripts\python.exe -m unittest discover app.tests
-.\venv\Scripts\python.exe -m compileall app
+.\venv\Scripts\python.exe -m unittest discover -s app\tests
 ```
 
 ### Frontend
@@ -390,11 +454,144 @@ npm run lint
 npm run build
 ```
 
-## Development Notes
+## Common Errors
 
-- Root `frontend` currently has uncommitted or nested-repo state in this workspace; it was not modified while creating this README.
-- The Spring Boot Maven wrapper may fail in some PowerShell environments. Use system `mvn` if that happens.
-- Keep `INTERNAL_API_KEY` identical in Spring Boot and FastAPI.
-- Use a strong `JWT_SECRET` outside local development.
-- The scanner CLIs must be installed on the FastAPI host for full analysis coverage.
-- FastAPI only clones public HTTPS GitHub repositories after Spring normalizes repository URLs.
+### Maven wrapper fails in PowerShell
+
+Use system Maven:
+
+```powershell
+cd backend-core
+mvn test
+```
+
+### Spring Boot cannot connect to PostgreSQL
+
+Start local infrastructure:
+
+```powershell
+docker compose up -d postgres
+```
+
+Confirm `SPRING_DATASOURCE_URL`, username, and password match your local database.
+
+### FastAPI says a scanner is missing
+
+Install the optional scanner CLI or treat the skipped scanner as expected for local development.
+
+### Frontend cannot reach the API
+
+Set:
+
+```powershell
+$env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
+```
+
+Then restart `npm run dev`.
+
+### FastAPI callback is unauthorized
+
+Ensure `INTERNAL_API_KEY` has the same value in Spring Boot and FastAPI.
+
+## Backup And Restore
+
+Use the scripts in `scripts/` for repeatable backups and restores. See `docs/OPERATIONS.md` for the runbook.
+
+### PostgreSQL backup
+
+```powershell
+.\scripts\backup-postgres.ps1
+```
+
+### PostgreSQL restore
+
+Restoring overwrites data. Verify the target database before running restore commands.
+
+```powershell
+.\scripts\restore-postgres.ps1 -BackupFile .\backups\codepulse-postgres-YYYYMMDD-HHMMSS.sql
+```
+
+### Qdrant
+
+Qdrant stores embeddings for code chunks. If Qdrant data is lost, embeddings can usually be regenerated by rescanning repositories. Production deployments should use Qdrant snapshots or volume backups.
+
+### Reports
+
+Reports are stored in PostgreSQL as bytes. PostgreSQL backups include reports.
+
+### Redis
+
+Redis is currently not the source of durable application data. If later worker queues depend on Redis durability, enable persistence and back up the Redis volume.
+
+Recommended backup posture:
+
+- daily PostgreSQL backups,
+- weekly full volume backups,
+- encrypted off-server copies,
+- regular restore testing.
+
+## Production Deployment
+
+Do not deploy from this repository without reviewing production values.
+
+Simple VPS flow:
+
+1. Provision an Ubuntu server.
+2. Install Docker Engine and Docker Compose.
+3. Create a non-root deployment user.
+4. Configure firewall rules so only HTTP/HTTPS/SSH are public.
+5. Point a domain to the server.
+6. Clone this repository.
+7. Copy `.env.example` to `.env`.
+8. Fill production values with strong secrets.
+9. Start with production Compose:
+
+   ```bash
+   docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+   ```
+
+10. Verify health.
+11. Configure HTTPS using the Nginx TLS template.
+12. Configure backups and monitoring.
+
+See `docs/DEPLOYMENT.md` for the full guide.
+
+## Upgrade Process
+
+Recommended future upgrade flow:
+
+1. Read release notes.
+2. Back up PostgreSQL and persistent volumes.
+3. Pull the new version.
+4. Review environment variable changes.
+5. Validate Compose config.
+6. Build images.
+7. Start services.
+8. Verify health endpoints.
+9. Run smoke tests.
+
+## Rollback Process
+
+Recommended future rollback flow:
+
+1. Stop new containers.
+2. Start the previous known-good image or checkout.
+3. Restore database only if a migration or data change requires it.
+4. Verify `/api/health`, frontend access, scan initiation, and report download.
+5. Review logs for failed callbacks or incomplete scans.
+
+## Contribution Instructions
+
+See `CONTRIBUTING.md` for contribution guidelines.
+
+Before opening a pull request:
+
+- run relevant tests,
+- update documentation,
+- keep the frontend calling Spring Boot only,
+- avoid committing secrets,
+- preserve existing architecture and ownership checks.
+
+## License
+
+CodePulse AI is licensed under the Apache License 2.0. See `LICENSE`.

@@ -19,6 +19,10 @@ backend-ai/.env
 # Docker
 postgres_data/
 qdrant_data/
+backups/
+*.sql
+*.dump
+*.backup
 
 # OS
 .DS_Store
